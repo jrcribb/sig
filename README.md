@@ -165,7 +165,7 @@ Options:
       --retrieval-timeout <RETRIEVAL_TIMEOUT_MILLIS>
           Timeout to read a next line from the stream in milliseconds. [default: 10]
       --render-interval <RENDER_INTERVAL_MILLIS>
-          Interval to render a line in milliseconds. [default: 10]
+          Interval to render a line in milliseconds.
   -q, --queue-capacity <QUEUE_CAPACITY>
           Queue capacity to store lines. [default: 1000]
   -a, --archived
@@ -174,6 +174,8 @@ Options:
           Case insensitive search.
       --cmd <CMD>
           Command to execute on initial and retries.
+  -Q, --query <QUERY>
+          Initial query.
   -h, --help
           Print help (see more with '--help')
   -V, --version
