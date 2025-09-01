@@ -7,7 +7,11 @@ use tokio::{
 };
 
 use promkit_core::{
-    crossterm::{self, event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers}, style::ContentStyle},
+    crossterm::{
+        self,
+        event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
+        style::ContentStyle,
+    },
     PaneFactory,
 };
 use promkit_widgets::text_editor;
