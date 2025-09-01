@@ -27,13 +27,14 @@ pub fn spawn_stdin_sender(
             loop {
                 match timeout(retrieval_timeout, reader.next_line()).await {
                     Ok(Ok(Some(line))) => {
-                        let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
+                        let escaped =
+                            strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                         tx.send(escaped).await?;
-                    },
+                    }
                     // ignore timeout and continue
                     Err(_) => {
                         continue;
-                    },
+                    }
                     _ => break,
                 }
             }
