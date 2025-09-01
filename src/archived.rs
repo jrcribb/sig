@@ -1,8 +1,10 @@
 use rayon::prelude::*;
 
-use promkit::{async_trait::async_trait, Prompt, Signal};
+use promkit::{async_trait::async_trait, Prompt};
 use promkit_core::{
-    crossterm::{self, event::Event, style::ContentStyle},
+    crossterm::{self, event::{
+        Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers,
+    }, style::ContentStyle},
     grapheme::StyledGraphemes,
     render::Renderer,
     PaneFactory,
@@ -13,8 +15,6 @@ use promkit_widgets::{
 };
 
 use crate::sig;
-
-mod keymap;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Index {
@@ -36,14 +36,123 @@ struct Archived {
     cmd: Option<String>,
 }
 
+impl Archived {
+    fn evaluate_internal(&mut self, event: &Event) -> anyhow::Result<promkit::Signal> {
+        match event {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('r'),
+                modifiers: KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => {
+                if self.cmd.is_some() {
+                    // Exiting archive mode here allows
+                    // the caller to re-enter streaming mode,
+                    // as it is running in an infinite loop.
+                    return Ok(promkit::Signal::Quit);
+                }
+            }
+
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('c'),
+                modifiers: KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => return Err(anyhow::anyhow!("ctrl+c")),
+
+            // Move cursor (text editor)
+            Event::Key(KeyEvent {
+                code: KeyCode::Left,
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => {
+                self.readline.texteditor.backward();
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Right,
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => {
+                self.readline.texteditor.forward();
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('a'),
+                modifiers: KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => self.readline.texteditor.move_to_head(),
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('e'),
+                modifiers: KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => self.readline.texteditor.move_to_tail(),
+
+            // Move cursor (listbox).
+            Event::Key(KeyEvent {
+                code: KeyCode::Up,
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => {
+                self.text.listbox.backward();
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Down,
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => {
+                self.text.listbox.forward();
+            }
+
+            // Erase char(s).
+            Event::Key(KeyEvent {
+                code: KeyCode::Backspace,
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => self.readline.texteditor.erase(),
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('u'),
+                modifiers: KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => self.readline.texteditor.erase_all(),
+
+            // Input char.
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(ch),
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            })
+            | Event::Key(KeyEvent {
+                code: KeyCode::Char(ch),
+                modifiers: KeyModifiers::SHIFT,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            }) => match self.readline.edit_mode {
+                text_editor::Mode::Insert => self.readline.texteditor.insert(*ch),
+                text_editor::Mode::Overwrite => self.readline.texteditor.overwrite(*ch),
+            },
+
+            _ => (),
+        }
+        Ok(promkit::Signal::Continue)
+    }
+}
+
 #[async_trait]
 impl Prompt for Archived {
     async fn initialize(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn evaluate(&mut self, event: &Event) -> anyhow::Result<Signal> {
-        let signal = keymap::default(event, &mut self.readline, &mut self.text, self.cmd.clone());
+    async fn evaluate(&mut self, event: &Event) -> anyhow::Result<promkit::Signal> {
+        let signal = self.evaluate_internal(event);
         let (width, height) = crossterm::terminal::size()?;
 
         let current_query = self.readline.texteditor.text_without_cursor().to_string();
