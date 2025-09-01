@@ -11,12 +11,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use promkit::{
+use promkit_core::{
     crossterm::{self, event, style::ContentStyle},
     grapheme::StyledGraphemes,
-    switch::ActiveKeySwitcher,
-    text_editor, PaneFactory,
+    PaneFactory,
 };
+use promkit_widgets::text_editor;
 
 mod keymap;
 use crate::{cmd, stdin, terminal::Terminal, Signal};
@@ -80,7 +80,6 @@ pub async fn run(
     case_insensitive: bool,
     cmd: Option<String>,
 ) -> anyhow::Result<(Signal, VecDeque<String>)> {
-    let keymap = ActiveKeySwitcher::new("default", keymap::default);
     let size = crossterm::terminal::size()?;
 
     let pane = text_editor.create_pane(size.0, size.1);
@@ -143,7 +142,7 @@ pub async fn run(
     loop {
         let event = event::read()?;
         let mut text_editor = shared_text_editor.write().await;
-        signal = keymap.get()(&event, &mut text_editor, cmd.clone())?;
+        signal = keymap::default(&event, &mut text_editor, cmd.clone())?;
         if signal == Signal::GotoArchived || signal == Signal::GotoStreaming {
             break;
         }

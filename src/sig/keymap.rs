@@ -1,7 +1,7 @@
-use promkit::{
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
-    text_editor,
+use promkit_core::crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers,
 };
+use promkit_widgets::text_editor;
 
 use crate::Signal;
 
