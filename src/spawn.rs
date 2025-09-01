@@ -25,22 +25,15 @@ pub fn spawn_stdin_sender(
     Ok(InputTask {
         handle: tokio::spawn(async move {
             loop {
-                // Set a timeout to ensure non-blocking behavior,
-                // especially responsive to user inputs like ctrl+c.
-                // Continuously retry until cancellation to prevent loss of logs.
-                let ret = timeout(retrieval_timeout, reader.next_line()).await;
-                if ret.is_err() {
-                    continue;
-                }
-
-                let ret = ret?;
-
-                match ret {
-                    Ok(Some(line)) => {
-                        let escaped =
-                            strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
+                match timeout(retrieval_timeout, reader.next_line()).await {
+                    Ok(Ok(Some(line))) => {
+                        let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                         tx.send(escaped).await?;
-                    }
+                    },
+                    // ignore timeout and continue
+                    Err(_) => {
+                        continue;
+                    },
                     _ => break,
                 }
             }
