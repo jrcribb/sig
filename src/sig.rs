@@ -19,7 +19,7 @@ pub async fn run(
     text_editor: text_editor::State,
     highlight_style: ContentStyle,
     retrieval_timeout: Duration,
-    render_interval: Duration,
+    render_interval: Option<Duration>,
     queue_capacity: usize,
     case_insensitive: bool,
     cmd: Option<String>,
@@ -44,10 +44,12 @@ pub async fn run(
 
     let keeping: JoinHandle<anyhow::Result<VecDeque<String>>> = tokio::spawn(async move {
         let mut queue = VecDeque::with_capacity(queue_capacity);
-        let mut interval = time::interval(render_interval);
+        let mut maybe_interval = render_interval.map(|p| time::interval(p));
 
         loop {
-            interval.tick().await;
+            if let Some(interval) = &mut maybe_interval {
+                interval.tick().await;
+            }
             match rx.recv().await {
                 Some(line) => {
                     let text_editor = readonly_text_editor.read().await;

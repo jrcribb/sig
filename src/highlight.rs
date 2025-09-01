@@ -47,7 +47,7 @@ fn matched(queries: &[&str], line: &str, case_insensitive: bool) -> anyhow::Resu
         .case_insensitive(case_insensitive)
         .build_many(queries)?
         .find_iter_at(line.as_bytes(), 0, |m| {
-            if m.start() >= line.as_bytes().len() {
+            if m.start() >= line.len() {
                 return false;
             }
             matched.push(m);

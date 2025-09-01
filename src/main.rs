@@ -64,12 +64,12 @@ pub struct Args {
 
     #[arg(
         long = "render-interval",
-        default_value = "10",
+        default_value = None,
         help = "Interval to render a line in milliseconds.",
         long_help = "Adjust this value to prevent screen flickering
         when a large volume of lines is rendered in a short period."
     )]
-    pub render_interval_millis: u64,
+    pub render_interval_millis: Option<u64>,
 
     #[arg(
         short = 'q',
@@ -222,7 +222,7 @@ async fn main() -> anyhow::Result<()> {
             },
             highlight_style,
             Duration::from_millis(args.retrieval_timeout_millis),
-            Duration::from_millis(args.render_interval_millis),
+            args.render_interval_millis.map(Duration::from_millis),
             args.queue_capacity,
             args.case_insensitive,
             args.cmd.clone(),
@@ -232,7 +232,6 @@ async fn main() -> anyhow::Result<()> {
             crossterm::execute!(
                 io::stdout(),
                 crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                crossterm::terminal::Clear(crossterm::terminal::ClearType::Purge),
                 cursor::MoveTo(0, 0),
             )?;
 
@@ -272,7 +271,6 @@ async fn main() -> anyhow::Result<()> {
                     crossterm::execute!(
                         io::stdout(),
                         crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                        crossterm::terminal::Clear(crossterm::terminal::ClearType::Purge),
                         cursor::MoveTo(0, 0),
                     )?;
                 }
