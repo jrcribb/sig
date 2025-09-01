@@ -7,7 +7,7 @@ use promkit_core::{
     render::Renderer,
     PaneFactory,
 };
-use promkit_widgets::{listbox, text_editor};
+use promkit_widgets::{listbox::{self, Listbox}, text_editor};
 
 use crate::sig;
 
@@ -16,7 +16,7 @@ mod keymap;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Index {
     Readline = 0,
-    Logs = 1,
+    Text = 1,
 }
 
 struct Archived {
@@ -24,7 +24,10 @@ struct Archived {
     readline: text_editor::State,
     // To track changes in the text editor
     prev_query: String,
-    logs: listbox::State,
+    // Initial text to search
+    init_text: Listbox,
+    // Search results
+    text: listbox::State,
     highlight_style: ContentStyle,
     case_insensitive: bool,
     cmd: Option<String>,
@@ -37,38 +40,38 @@ impl Prompt for Archived {
     }
 
     async fn evaluate(&mut self, event: &Event) -> anyhow::Result<Signal> {
-        let signal = keymap::default(event, &mut self.readline, &mut self.logs, self.cmd.clone());
+        let signal = keymap::default(event, &mut self.readline, &mut self.text, self.cmd.clone());
         let (width, height) = crossterm::terminal::size()?;
-        // TODO: check diff about
-        self.renderer
-            .update([(Index::Readline, self.readline.create_pane(width, height))]);
 
         let current_query = self.readline.texteditor.text_without_cursor().to_string();
         if self.prev_query != current_query {
-            let list: Vec<StyledGraphemes> = self
-                .logs
-                .listbox
-                .items()
-                .par_iter()
-                .filter_map(|line| {
-                    sig::styled(
-                        &current_query,
-                        &line.to_string(),
-                        self.highlight_style,
-                        self.case_insensitive,
-                    )
-                })
-                .collect();
-
-            // TODO: use list with listbox::State
-            self.renderer.update([]);
+            // Update listbox items based on the current query
+            self.text.listbox = Listbox::from_styled_graphemes(
+                self
+                    .init_text
+                    .items()
+                    .par_iter()
+                    .filter_map(|line| {
+                        sig::styled(
+                            &current_query,
+                            &line.to_string(),
+                            self.highlight_style,
+                            self.case_insensitive,
+                        )
+                    })
+                    .collect::<Vec<StyledGraphemes>>()
+            );
 
             // Update previous query
             self.prev_query = current_query;
         }
 
-        // Render the updated panes
-        self.renderer.render().await?;
+        // TODO: determine whether to render to check cursor was moved or not
+        self.renderer
+            .update([
+                (Index::Readline, self.readline.create_pane(width, height)),
+                (Index::Text, self.text.create_pane(width, height)),
+            ]).render().await?;
 
         signal
     }
@@ -82,7 +85,7 @@ impl Prompt for Archived {
 
 pub async fn run(
     readline: text_editor::State,
-    logs: listbox::State,
+    text: listbox::State,
     highlight_style: ContentStyle,
     case_insensitive: bool,
     cmd: Option<String>,
@@ -92,14 +95,15 @@ pub async fn run(
         renderer: Renderer::try_new_with_panes(
             [
                 (Index::Readline, readline.create_pane(width, height)),
-                (Index::Logs, logs.create_pane(width, height)),
+                (Index::Text, text.create_pane(width, height)),
             ],
             true,
         )
         .await?,
         prev_query: String::new(),
         readline,
-        logs,
+        init_text: text.listbox.clone(),
+        text,
         highlight_style,
         case_insensitive,
         cmd,

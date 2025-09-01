@@ -7,7 +7,7 @@ use promkit_widgets::{listbox, text_editor};
 pub fn default(
     event: &Event,
     readline: &mut text_editor::State,
-    logs: &mut listbox::State,
+    text: &mut listbox::State,
     cmd: Option<String>,
 ) -> anyhow::Result<Signal> {
     match event {
@@ -69,7 +69,7 @@ pub fn default(
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         }) => {
-            logs.listbox.backward();
+            text.listbox.backward();
         }
         Event::Key(KeyEvent {
             code: KeyCode::Down,
@@ -77,7 +77,7 @@ pub fn default(
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         }) => {
-            logs.listbox.forward();
+            text.listbox.forward();
         }
 
         // Erase char(s).
