@@ -84,6 +84,10 @@ pub fn spawn_cmd_result_sender(
                                 let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                                 tx.send(escaped).await?;
                             },
+                            // ignore timeout and continue
+                            Err(_) => {
+                                continue;
+                            },
                             _ => break,
                         }
                     },
@@ -92,6 +96,10 @@ pub fn spawn_cmd_result_sender(
                             Ok(Ok(Some(line))) => {
                                 let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                                 tx.send(escaped).await?;
+                            },
+                            // ignore timeout and continue
+                            Err(_) => {
+                                continue;
                             },
                             _ => break,
                         }
