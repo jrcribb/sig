@@ -13,17 +13,18 @@ name = "sig"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.83"
-clap = { version = "4.5.4", features = ["derive"] }
-futures = "0.3.30"
+anyhow = "1.0.99"
+clap = { version = "4.5.46", features = ["derive"] }
+futures = "0.3.31"
 futures-timer = "3.0.3"
-grep = "0.3.1"
-promkit = "0.5.1"
-rayon = "1.5.0"
-regex = "1.10.4"
-strip-ansi-escapes = "0.2.0"
+grep = "0.3.2"
+promkit-core = "0.2.0"
+promkit-widgets = { version = "0.2.0", features = ["texteditor", "listbox"] }
+rayon = "1.11.0"
+regex = "1.11.2"
+strip-ansi-escapes = "0.2.1"
 tokio = { version = "1.37.0", features = ["full"] }
-tokio-util = "0.7.11"
+tokio-util = "0.7.16"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
