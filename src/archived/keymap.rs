@@ -1,6 +1,6 @@
 use promkit::Signal;
-use promkit_core::{
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
+use promkit_core::crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers,
 };
 use promkit_widgets::{listbox, text_editor};
 

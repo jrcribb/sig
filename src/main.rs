@@ -200,7 +200,8 @@ async fn main() -> anyhow::Result<()> {
             args.case_insensitive,
             // In archived mode, command for retry is meaningless.
             None,
-        ).await?;
+        )
+        .await?;
     } else {
         while let Ok((signal, queue)) = sig::run(
             text_editor::State {
@@ -256,7 +257,8 @@ async fn main() -> anyhow::Result<()> {
                         highlight_style,
                         args.case_insensitive,
                         args.cmd.clone(),
-                    ).await?;
+                    )
+                    .await?;
 
                     // Re-enable raw mode and hide the cursor again here
                     // because they are disabled and shown, respectively, by promkit.

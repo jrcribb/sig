@@ -1,8 +1,11 @@
 use rayon::prelude::*;
 
-use promkit::{Prompt, Signal, async_trait::async_trait};
+use promkit::{async_trait::async_trait, Prompt, Signal};
 use promkit_core::{
-    PaneFactory, crossterm::{self, event::Event, style::ContentStyle}, grapheme::StyledGraphemes, pane::Pane, render::Renderer
+    crossterm::{self, event::Event, style::ContentStyle},
+    grapheme::StyledGraphemes,
+    render::Renderer,
+    PaneFactory,
 };
 use promkit_widgets::{listbox, text_editor};
 
@@ -29,34 +32,33 @@ struct Archived {
 
 #[async_trait]
 impl Prompt for Archived {
-     async fn initialize(&mut self) -> anyhow::Result<()> {
+    async fn initialize(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 
     async fn evaluate(&mut self, event: &Event) -> anyhow::Result<Signal> {
         let signal = keymap::default(event, &mut self.readline, &mut self.logs, self.cmd.clone());
         let (width, height) = crossterm::terminal::size()?;
-        // TODO: check diff about 
+        // TODO: check diff about
         self.renderer
             .update([(Index::Readline, self.readline.create_pane(width, height))]);
 
         let current_query = self.readline.texteditor.text_without_cursor().to_string();
         if self.prev_query != current_query {
-
-        let list: Vec<StyledGraphemes> = self
-            .logs
-            .listbox
-            .items()
-            .par_iter()
-            .filter_map(|line| {
-                sig::styled(
-                    &current_query,
-                    &line.to_string(),
-                    self.highlight_style,
-                    self.case_insensitive,
-                )
-            })
-            .collect();
+            let list: Vec<StyledGraphemes> = self
+                .logs
+                .listbox
+                .items()
+                .par_iter()
+                .filter_map(|line| {
+                    sig::styled(
+                        &current_query,
+                        &line.to_string(),
+                        self.highlight_style,
+                        self.case_insensitive,
+                    )
+                })
+                .collect();
 
             // TODO: use list with listbox::State
             self.renderer.update([]);
@@ -64,7 +66,7 @@ impl Prompt for Archived {
             // Update previous query
             self.prev_query = current_query;
         }
-        
+
         // Render the updated panes
         self.renderer.render().await?;
 
@@ -90,15 +92,18 @@ pub async fn run(
         renderer: Renderer::try_new_with_panes(
             [
                 (Index::Readline, readline.create_pane(width, height)),
-                (Index::Logs, logs.create_pane(width, height))
+                (Index::Logs, logs.create_pane(width, height)),
             ],
             true,
-        ).await?,
+        )
+        .await?,
         prev_query: String::new(),
         readline,
         logs,
         highlight_style,
         case_insensitive,
         cmd,
-    }.run().await
+    }
+    .run()
+    .await
 }
