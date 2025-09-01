@@ -7,16 +7,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use promkit::{
-    crossterm::{
-        self, cursor, execute,
-        style::Color,
-        terminal::{disable_raw_mode, enable_raw_mode},
-    },
-    listbox,
-    style::StyleBuilder,
-    text_editor,
+use promkit_core::crossterm::{
+    self, cursor, execute,
+    style::{Color, ContentStyle},
+    terminal::{disable_raw_mode, enable_raw_mode},
 };
+use promkit_widgets::{listbox, text_editor};
 
 mod archived;
 mod cmd;
@@ -125,7 +121,10 @@ async fn main() -> anyhow::Result<()> {
     enable_raw_mode()?;
     execute!(io::stdout(), cursor::Hide)?;
 
-    let highlight_style = StyleBuilder::new().fgc(Color::Red).build();
+    let highlight_style = ContentStyle {
+        foreground_color: Some(Color::Red),
+        ..Default::default()
+    };
 
     if args.archived {
         let (tx, mut rx) = mpsc::channel(1);
@@ -179,16 +178,16 @@ async fn main() -> anyhow::Result<()> {
 
         archived::run(
             text_editor::State {
-                texteditor: Default::default(),
-                history: Default::default(),
                 prefix: String::from("❯❯❯ "),
-                mask: Default::default(),
-                prefix_style: StyleBuilder::new().fgc(Color::DarkBlue).build(),
-                active_char_style: StyleBuilder::new().bgc(Color::DarkCyan).build(),
-                inactive_char_style: StyleBuilder::new().build(),
-                edit_mode: Default::default(),
-                word_break_chars: Default::default(),
-                lines: Default::default(),
+                prefix_style: ContentStyle {
+                    foreground_color: Some(Color::DarkBlue),
+                    ..Default::default()
+                },
+                active_char_style: ContentStyle {
+                    background_color: Some(Color::DarkCyan),
+                    ..Default::default()
+                },
+                ..Default::default()
             },
             listbox::State {
                 listbox: listbox::Listbox::from_displayable(queue),
@@ -205,16 +204,16 @@ async fn main() -> anyhow::Result<()> {
     } else {
         while let Ok((signal, queue)) = sig::run(
             text_editor::State {
-                texteditor: Default::default(),
-                history: Default::default(),
                 prefix: String::from("❯❯ "),
-                mask: Default::default(),
-                prefix_style: StyleBuilder::new().fgc(Color::DarkGreen).build(),
-                active_char_style: StyleBuilder::new().bgc(Color::DarkCyan).build(),
-                inactive_char_style: StyleBuilder::new().build(),
-                edit_mode: Default::default(),
-                word_break_chars: Default::default(),
-                lines: Default::default(),
+                prefix_style: ContentStyle {
+                    foreground_color: Some(Color::DarkGreen),
+                    ..Default::default()
+                },
+                active_char_style: ContentStyle {
+                    background_color: Some(Color::DarkCyan),
+                    ..Default::default()
+                },
+                ..Default::default()
             },
             highlight_style,
             Duration::from_millis(args.retrieval_timeout_millis),
@@ -236,16 +235,16 @@ async fn main() -> anyhow::Result<()> {
                 Signal::GotoArchived => {
                     archived::run(
                         text_editor::State {
-                            texteditor: Default::default(),
-                            history: Default::default(),
                             prefix: String::from("❯❯❯ "),
-                            mask: Default::default(),
-                            prefix_style: StyleBuilder::new().fgc(Color::DarkBlue).build(),
-                            active_char_style: StyleBuilder::new().bgc(Color::DarkCyan).build(),
-                            inactive_char_style: StyleBuilder::new().build(),
-                            edit_mode: Default::default(),
-                            word_break_chars: Default::default(),
-                            lines: Default::default(),
+                            prefix_style: ContentStyle {
+                                foreground_color: Some(Color::DarkBlue),
+                                ..Default::default()
+                            },
+                            active_char_style: ContentStyle {
+                                background_color: Some(Color::DarkCyan),
+                                ..Default::default()
+                            },
+                            ..Default::default()
                         },
                         listbox::State {
                             listbox: listbox::Listbox::from_displayable(queue),
