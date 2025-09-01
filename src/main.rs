@@ -17,6 +17,7 @@ use promkit_widgets::{
 };
 
 mod archived;
+mod highlight;
 mod sig;
 mod spawn;
 mod terminal;

@@ -1,9 +1,5 @@
 use std::{collections::VecDeque, sync::Arc};
 
-use grep::{
-    matcher::{Match, Matcher},
-    regex::RegexMatcherBuilder,
-};
 use tokio::{
     sync::{mpsc, RwLock},
     task::JoinHandle,
@@ -12,63 +8,12 @@ use tokio::{
 
 use promkit_core::{
     crossterm::{self, event, style::ContentStyle},
-    grapheme::StyledGraphemes,
     PaneFactory,
 };
 use promkit_widgets::text_editor;
 
 mod keymap;
-use crate::{spawn, terminal::Terminal, Signal};
-
-fn matched(queries: &[&str], line: &str, case_insensitive: bool) -> anyhow::Result<Vec<Match>> {
-    let mut matched = Vec::new();
-    RegexMatcherBuilder::new()
-        .case_insensitive(case_insensitive)
-        .build_many(queries)?
-        .find_iter_at(line.as_bytes(), 0, |m| {
-            if m.start() >= line.as_bytes().len() {
-                return false;
-            }
-            matched.push(m);
-            true
-        })?;
-    Ok(matched)
-}
-
-pub fn styled(
-    query: &str,
-    line: &str,
-    highlight_style: ContentStyle,
-    case_insensitive: bool,
-) -> Option<StyledGraphemes> {
-    let piped = &query
-        .split('|')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<&str>>();
-
-    let mut styled = StyledGraphemes::from(line);
-
-    if query.is_empty() {
-        Some(styled)
-    } else {
-        match matched(piped, line, case_insensitive) {
-            Ok(matches) => {
-                if matches.is_empty() {
-                    None
-                } else {
-                    for m in matches {
-                        for i in m.start()..m.end() {
-                            styled = styled.apply_style_at(i, highlight_style);
-                        }
-                    }
-                    Some(styled)
-                }
-            }
-            _ => None,
-        }
-    }
-}
+use crate::{highlight::highlight, spawn, terminal::Terminal, Signal};
 
 pub async fn run(
     text_editor: text_editor::State,
@@ -114,13 +59,13 @@ pub async fn run(
                     }
                     queue.push_back(line.clone());
 
-                    if let Some(styled) = styled(
+                    if let Some(highlighted) = highlight(
                         &text_editor.texteditor.text_without_cursor().to_string(),
                         &line,
                         highlight_style,
                         case_insensitive,
                     ) {
-                        let matrix = styled.matrixify(size.0 as usize, size.1 as usize, 0).0;
+                        let matrix = highlighted.matrixify(size.0 as usize, size.1 as usize, 0).0;
                         let term = readonly_term.read().await;
                         term.draw_stream_and_pane(
                             matrix,

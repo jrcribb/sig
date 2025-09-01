@@ -2,9 +2,11 @@ use rayon::prelude::*;
 
 use promkit::{async_trait::async_trait, Prompt};
 use promkit_core::{
-    crossterm::{self, event::{
-        Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers,
-    }, style::ContentStyle},
+    crossterm::{
+        self,
+        event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
+        style::ContentStyle,
+    },
     grapheme::StyledGraphemes,
     render::Renderer,
     PaneFactory,
@@ -14,7 +16,7 @@ use promkit_widgets::{
     text_editor,
 };
 
-use crate::sig;
+use crate::highlight::highlight;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Index {
@@ -163,7 +165,7 @@ impl Prompt for Archived {
                     .items()
                     .par_iter()
                     .filter_map(|line| {
-                        sig::styled(
+                        highlight(
                             &current_query,
                             &line.to_string(),
                             self.highlight_style,
