@@ -44,8 +44,7 @@ pub async fn run(
 
     let keeping: JoinHandle<anyhow::Result<VecDeque<String>>> = tokio::spawn(async move {
         let mut queue = VecDeque::with_capacity(queue_capacity);
-        let interval = time::interval(render_interval);
-        futures::pin_mut!(interval);
+        let mut interval = time::interval(render_interval);
 
         loop {
             interval.tick().await;
