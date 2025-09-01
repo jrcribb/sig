@@ -5,7 +5,6 @@ use tokio::{
     sync::mpsc,
     time::{timeout, Duration},
 };
-use tokio_util::sync::CancellationToken;
 
 use promkit_core::crossterm::{
     self, cursor, execute,
@@ -15,9 +14,8 @@ use promkit_core::crossterm::{
 use promkit_widgets::{listbox, text_editor};
 
 mod archived;
-mod cmd;
 mod sig;
-mod stdin;
+mod spawn;
 mod terminal;
 
 #[derive(Eq, PartialEq)]
@@ -129,26 +127,16 @@ async fn main() -> anyhow::Result<()> {
     if args.archived {
         let (tx, mut rx) = mpsc::channel(1);
 
-        if let Some(cmd) = args.cmd.clone() {
-            tokio::spawn(async move {
-                cmd::execute(
-                    &cmd,
-                    tx,
-                    Duration::from_millis(args.retrieval_timeout_millis),
-                    CancellationToken::new(),
-                )
-                .await
-            });
-        } else {
-            tokio::spawn(async move {
-                stdin::streaming(
-                    tx,
-                    Duration::from_millis(args.retrieval_timeout_millis),
-                    CancellationToken::new(),
-                )
-                .await
-            });
-        }
+        let input_task = match &args.cmd {
+            Some(cmd) => spawn::spawn_cmd_result_sender(
+                cmd,
+                tx,
+                Duration::from_millis(args.retrieval_timeout_millis),
+            ),
+            None => {
+                spawn::spawn_stdin_sender(tx, Duration::from_millis(args.retrieval_timeout_millis))
+            }
+        }?;
 
         let mut queue = VecDeque::with_capacity(args.queue_capacity);
         loop {
@@ -169,10 +157,11 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        input_task.handle.await??;
+
         crossterm::execute!(
             io::stdout(),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::Purge),
             cursor::MoveTo(0, 0),
         )?;
 

@@ -9,7 +9,7 @@ use tokio::{
 };
 
 /// A task that reads lines from a source (stdin or command output) and sends them through an mpsc channel.
-struct InputTask {
+pub struct InputTask {
     pub handle: JoinHandle<anyhow::Result<()>>,
     // None if the task reads from stdin
     pub child: Option<Child>,
@@ -51,7 +51,7 @@ pub fn spawn_stdin_sender(
 }
 
 /// Spawn a command and read its stdout and stderr, sending lines to the provided mpsc sender.
-pub async fn spawn_cmd_result_sender(
+pub fn spawn_cmd_result_sender(
     cmdstr: &str,
     tx: mpsc::Sender<String>,
     retrieval_timeout: Duration,

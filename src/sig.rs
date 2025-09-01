@@ -9,7 +9,6 @@ use tokio::{
     task::JoinHandle,
     time::{self, Duration},
 };
-use tokio_util::sync::CancellationToken;
 
 use promkit_core::{
     crossterm::{self, event, style::ContentStyle},
@@ -19,7 +18,7 @@ use promkit_core::{
 use promkit_widgets::text_editor;
 
 mod keymap;
-use crate::{cmd, stdin, terminal::Terminal, Signal};
+use crate::{spawn, terminal::Terminal, Signal};
 
 fn matched(queries: &[&str], line: &str, case_insensitive: bool) -> anyhow::Result<Vec<Match>> {
     let mut matched = Vec::new();
@@ -92,14 +91,11 @@ pub async fn run(
     let readonly_text_editor = Arc::clone(&shared_text_editor);
 
     let (tx, mut rx) = mpsc::channel(1);
-    let canceler = CancellationToken::new();
 
-    let canceled = canceler.clone();
-    let streaming = if let Some(cmd) = cmd.clone() {
-        tokio::spawn(async move { cmd::execute(&cmd, tx, retrieval_timeout, canceled).await })
-    } else {
-        tokio::spawn(async move { stdin::streaming(tx, retrieval_timeout, canceled).await })
-    };
+    let input_task = match &cmd {
+        Some(cmd) => spawn::spawn_cmd_result_sender(cmd, tx, retrieval_timeout),
+        None => spawn::spawn_stdin_sender(tx, retrieval_timeout),
+    }?;
 
     let keeping: JoinHandle<anyhow::Result<VecDeque<String>>> = tokio::spawn(async move {
         let mut queue = VecDeque::with_capacity(queue_capacity);
@@ -153,8 +149,10 @@ pub async fn run(
         term.draw_pane(&pane)?;
     }
 
-    canceler.cancel();
-    let _: anyhow::Result<(), anyhow::Error> = streaming.await?;
+    if let Some(mut child) = input_task.child {
+        let _ = child.kill().await;
+    }
+    input_task.handle.abort();
 
     Ok((signal, keeping.await??))
 }

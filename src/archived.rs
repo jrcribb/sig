@@ -7,7 +7,10 @@ use promkit_core::{
     render::Renderer,
     PaneFactory,
 };
-use promkit_widgets::{listbox::{self, Listbox}, text_editor};
+use promkit_widgets::{
+    listbox::{self, Listbox},
+    text_editor,
+};
 
 use crate::sig;
 
@@ -47,8 +50,7 @@ impl Prompt for Archived {
         if self.prev_query != current_query {
             // Update listbox items based on the current query
             self.text.listbox = Listbox::from_styled_graphemes(
-                self
-                    .init_text
+                self.init_text
                     .items()
                     .par_iter()
                     .filter_map(|line| {
@@ -59,7 +61,7 @@ impl Prompt for Archived {
                             self.case_insensitive,
                         )
                     })
-                    .collect::<Vec<StyledGraphemes>>()
+                    .collect::<Vec<StyledGraphemes>>(),
             );
 
             // Update previous query
@@ -71,7 +73,9 @@ impl Prompt for Archived {
             .update([
                 (Index::Readline, self.readline.create_pane(width, height)),
                 (Index::Text, self.text.create_pane(width, height)),
-            ]).render().await?;
+            ])
+            .render()
+            .await?;
 
         signal
     }
