@@ -170,6 +170,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        // Ensure the input task has completed
         input_task.handle.await??;
 
         crossterm::execute!(
