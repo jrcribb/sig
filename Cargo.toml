@@ -18,6 +18,7 @@ clap = { version = "4.5.46", features = ["derive"] }
 futures = "0.3.31"
 futures-timer = "3.0.3"
 grep = "0.3.2"
+promkit = "0.10.1"
 promkit-core = "0.2.0"
 promkit-widgets = { version = "0.2.0", features = ["texteditor", "listbox"] }
 rayon = "1.11.0"
