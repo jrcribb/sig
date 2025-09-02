@@ -11,7 +11,10 @@ use promkit_core::crossterm::{
     style::{Color, ContentStyle},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use promkit_widgets::{listbox, text_editor};
+use promkit_widgets::{
+    listbox,
+    text_editor::{self, TextEditor},
+};
 
 mod archived;
 mod sig;
@@ -103,6 +106,15 @@ pub struct Args {
         whenever a retry is triggered according to key mappings."
     )]
     pub cmd: Option<String>,
+
+    #[arg(
+        short = 'Q',
+        long = "query",
+        help = "Initial query.",
+        long_help = "This query is set as the initial text
+        in the text editor when the program starts."
+    )]
+    pub query: Option<String>,
 }
 
 impl Drop for Args {
@@ -167,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
 
         archived::run(
             text_editor::State {
+                texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
                 prefix: String::from("❯❯❯ "),
                 prefix_style: ContentStyle {
                     foreground_color: Some(Color::DarkBlue),
@@ -194,6 +207,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         while let Ok((signal, queue)) = sig::run(
             text_editor::State {
+                texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
                 prefix: String::from("❯❯ "),
                 prefix_style: ContentStyle {
                     foreground_color: Some(Color::DarkGreen),
