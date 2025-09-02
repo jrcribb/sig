@@ -1,6 +1,6 @@
 [package]
 name = "sigrs"
-version = "0.1.4"
+version = "0.2.0"
 authors = ["ynqa <un.pensiero.vano@gmail.com>"]
 edition = "2021"
 description = "Interactive grep (for streaming)"
@@ -13,17 +13,16 @@ name = "sig"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.83"
-clap = { version = "4.5.4", features = ["derive"] }
-futures = "0.3.30"
-futures-timer = "3.0.3"
-grep = "0.3.1"
-promkit = "0.5.1"
-rayon = "1.5.0"
-regex = "1.10.4"
-strip-ansi-escapes = "0.2.0"
+anyhow = "1.0.99"
+clap = { version = "4.5.46", features = ["derive"] }
+grep = "0.3.2"
+promkit = "0.10.1"
+promkit-core = "0.2.0"
+promkit-widgets = { version = "0.2.0", features = ["texteditor", "listbox"] }
+rayon = "1.11.0"
+regex = "1.11.2"
+strip-ansi-escapes = "0.2.1"
 tokio = { version = "1.37.0", features = ["full"] }
-tokio-util = "0.7.11"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]

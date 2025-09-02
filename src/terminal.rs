@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use promkit::{
+use promkit_core::{
     crossterm::{self, cursor, style, terminal},
     grapheme::StyledGraphemes,
     pane::Pane,

@@ -5,23 +5,21 @@ use tokio::{
     sync::mpsc,
     time::{timeout, Duration},
 };
-use tokio_util::sync::CancellationToken;
 
-use promkit::{
-    crossterm::{
-        self, cursor, execute,
-        style::Color,
-        terminal::{disable_raw_mode, enable_raw_mode},
-    },
+use promkit_core::crossterm::{
+    self, cursor, execute,
+    style::{Color, ContentStyle},
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
+use promkit_widgets::{
     listbox,
-    style::StyleBuilder,
-    text_editor,
+    text_editor::{self, TextEditor},
 };
 
 mod archived;
-mod cmd;
+mod highlight;
 mod sig;
-mod stdin;
+mod spawn;
 mod terminal;
 
 #[derive(Eq, PartialEq)]
@@ -66,12 +64,12 @@ pub struct Args {
 
     #[arg(
         long = "render-interval",
-        default_value = "10",
+        default_value = None,
         help = "Interval to render a line in milliseconds.",
         long_help = "Adjust this value to prevent screen flickering
         when a large volume of lines is rendered in a short period."
     )]
-    pub render_interval_millis: u64,
+    pub render_interval_millis: Option<u64>,
 
     #[arg(
         short = 'q',
@@ -109,6 +107,15 @@ pub struct Args {
         whenever a retry is triggered according to key mappings."
     )]
     pub cmd: Option<String>,
+
+    #[arg(
+        short = 'Q',
+        long = "query",
+        help = "Initial query.",
+        long_help = "This query is set as the initial text
+        in the text editor when the program starts."
+    )]
+    pub query: Option<String>,
 }
 
 impl Drop for Args {
@@ -125,31 +132,24 @@ async fn main() -> anyhow::Result<()> {
     enable_raw_mode()?;
     execute!(io::stdout(), cursor::Hide)?;
 
-    let highlight_style = StyleBuilder::new().fgc(Color::Red).build();
+    let highlight_style = ContentStyle {
+        foreground_color: Some(Color::Red),
+        ..Default::default()
+    };
 
     if args.archived {
         let (tx, mut rx) = mpsc::channel(1);
 
-        if let Some(cmd) = args.cmd.clone() {
-            tokio::spawn(async move {
-                cmd::execute(
-                    &cmd,
-                    tx,
-                    Duration::from_millis(args.retrieval_timeout_millis),
-                    CancellationToken::new(),
-                )
-                .await
-            });
-        } else {
-            tokio::spawn(async move {
-                stdin::streaming(
-                    tx,
-                    Duration::from_millis(args.retrieval_timeout_millis),
-                    CancellationToken::new(),
-                )
-                .await
-            });
-        }
+        let input_task = match &args.cmd {
+            Some(cmd) => spawn::spawn_cmd_result_sender(
+                cmd,
+                tx,
+                Duration::from_millis(args.retrieval_timeout_millis),
+            ),
+            None => {
+                spawn::spawn_stdin_sender(tx, Duration::from_millis(args.retrieval_timeout_millis))
+            }
+        }?;
 
         let mut queue = VecDeque::with_capacity(args.queue_capacity);
         loop {
@@ -170,25 +170,28 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
+        // Ensure the input task has completed
+        input_task.handle.await??;
+
         crossterm::execute!(
             io::stdout(),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::Purge),
             cursor::MoveTo(0, 0),
         )?;
 
         archived::run(
             text_editor::State {
-                texteditor: Default::default(),
-                history: Default::default(),
+                texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
                 prefix: String::from("❯❯❯ "),
-                mask: Default::default(),
-                prefix_style: StyleBuilder::new().fgc(Color::DarkBlue).build(),
-                active_char_style: StyleBuilder::new().bgc(Color::DarkCyan).build(),
-                inactive_char_style: StyleBuilder::new().build(),
-                edit_mode: Default::default(),
-                word_break_chars: Default::default(),
-                lines: Default::default(),
+                prefix_style: ContentStyle {
+                    foreground_color: Some(Color::DarkBlue),
+                    ..Default::default()
+                },
+                active_char_style: ContentStyle {
+                    background_color: Some(Color::DarkCyan),
+                    ..Default::default()
+                },
+                ..Default::default()
             },
             listbox::State {
                 listbox: listbox::Listbox::from_displayable(queue),
@@ -201,24 +204,26 @@ async fn main() -> anyhow::Result<()> {
             args.case_insensitive,
             // In archived mode, command for retry is meaningless.
             None,
-        )?;
+        )
+        .await?;
     } else {
         while let Ok((signal, queue)) = sig::run(
             text_editor::State {
-                texteditor: Default::default(),
-                history: Default::default(),
+                texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
                 prefix: String::from("❯❯ "),
-                mask: Default::default(),
-                prefix_style: StyleBuilder::new().fgc(Color::DarkGreen).build(),
-                active_char_style: StyleBuilder::new().bgc(Color::DarkCyan).build(),
-                inactive_char_style: StyleBuilder::new().build(),
-                edit_mode: Default::default(),
-                word_break_chars: Default::default(),
-                lines: Default::default(),
+                prefix_style: ContentStyle {
+                    foreground_color: Some(Color::DarkGreen),
+                    ..Default::default()
+                },
+                active_char_style: ContentStyle {
+                    background_color: Some(Color::DarkCyan),
+                    ..Default::default()
+                },
+                ..Default::default()
             },
             highlight_style,
             Duration::from_millis(args.retrieval_timeout_millis),
-            Duration::from_millis(args.render_interval_millis),
+            args.render_interval_millis.map(Duration::from_millis),
             args.queue_capacity,
             args.case_insensitive,
             args.cmd.clone(),
@@ -228,7 +233,6 @@ async fn main() -> anyhow::Result<()> {
             crossterm::execute!(
                 io::stdout(),
                 crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                crossterm::terminal::Clear(crossterm::terminal::ClearType::Purge),
                 cursor::MoveTo(0, 0),
             )?;
 
@@ -236,16 +240,16 @@ async fn main() -> anyhow::Result<()> {
                 Signal::GotoArchived => {
                     archived::run(
                         text_editor::State {
-                            texteditor: Default::default(),
-                            history: Default::default(),
                             prefix: String::from("❯❯❯ "),
-                            mask: Default::default(),
-                            prefix_style: StyleBuilder::new().fgc(Color::DarkBlue).build(),
-                            active_char_style: StyleBuilder::new().bgc(Color::DarkCyan).build(),
-                            inactive_char_style: StyleBuilder::new().build(),
-                            edit_mode: Default::default(),
-                            word_break_chars: Default::default(),
-                            lines: Default::default(),
+                            prefix_style: ContentStyle {
+                                foreground_color: Some(Color::DarkBlue),
+                                ..Default::default()
+                            },
+                            active_char_style: ContentStyle {
+                                background_color: Some(Color::DarkCyan),
+                                ..Default::default()
+                            },
+                            ..Default::default()
                         },
                         listbox::State {
                             listbox: listbox::Listbox::from_displayable(queue),
@@ -257,7 +261,8 @@ async fn main() -> anyhow::Result<()> {
                         highlight_style,
                         args.case_insensitive,
                         args.cmd.clone(),
-                    )?;
+                    )
+                    .await?;
 
                     // Re-enable raw mode and hide the cursor again here
                     // because they are disabled and shown, respectively, by promkit.
@@ -267,7 +272,6 @@ async fn main() -> anyhow::Result<()> {
                     crossterm::execute!(
                         io::stdout(),
                         crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                        crossterm::terminal::Clear(crossterm::terminal::ClearType::Purge),
                         cursor::MoveTo(0, 0),
                     )?;
                 }

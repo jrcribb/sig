@@ -1,86 +1,130 @@
 use std::{collections::VecDeque, sync::Arc};
 
-use grep::{
-    matcher::{Match, Matcher},
-    regex::RegexMatcherBuilder,
-};
 use tokio::{
     sync::{mpsc, RwLock},
     task::JoinHandle,
     time::{self, Duration},
 };
-use tokio_util::sync::CancellationToken;
 
-use promkit::{
-    crossterm::{self, event, style::ContentStyle},
-    grapheme::StyledGraphemes,
-    switch::ActiveKeySwitcher,
-    text_editor, PaneFactory,
+use promkit_core::{
+    crossterm::{
+        self,
+        event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
+        style::ContentStyle,
+    },
+    PaneFactory,
 };
+use promkit_widgets::text_editor;
 
-mod keymap;
-use crate::{cmd, stdin, terminal::Terminal, Signal};
+use crate::{highlight::highlight, spawn, terminal::Terminal, Signal};
 
-fn matched(queries: &[&str], line: &str, case_insensitive: bool) -> anyhow::Result<Vec<Match>> {
-    let mut matched = Vec::new();
-    RegexMatcherBuilder::new()
-        .case_insensitive(case_insensitive)
-        .build_many(queries)?
-        .find_iter_at(line.as_bytes(), 0, |m| {
-            if m.start() >= line.as_bytes().len() {
-                return false;
+// Evaluate a key event and return the corresponding Signal.
+fn evaluate_event(
+    event: &Event,
+    state: &mut text_editor::State,
+    cmd: Option<String>,
+) -> anyhow::Result<Signal> {
+    match event {
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('f'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => return Ok(Signal::GotoArchived),
+
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => {
+            if cmd.is_some() {
+                return Ok(Signal::GotoStreaming);
             }
-            matched.push(m);
-            true
-        })?;
-    Ok(matched)
-}
-
-pub fn styled(
-    query: &str,
-    line: &str,
-    highlight_style: ContentStyle,
-    case_insensitive: bool,
-) -> Option<StyledGraphemes> {
-    let piped = &query
-        .split('|')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<&str>>();
-
-    let mut styled = StyledGraphemes::from(line);
-
-    if query.is_empty() {
-        Some(styled)
-    } else {
-        match matched(piped, line, case_insensitive) {
-            Ok(matches) => {
-                if matches.is_empty() {
-                    None
-                } else {
-                    for m in matches {
-                        for i in m.start()..m.end() {
-                            styled = styled.apply_style_at(i, highlight_style);
-                        }
-                    }
-                    Some(styled)
-                }
-            }
-            _ => None,
         }
+
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('c'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => return Err(anyhow::anyhow!("ctrl+c")),
+
+        // Move cursor.
+        Event::Key(KeyEvent {
+            code: KeyCode::Left,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => {
+            state.texteditor.backward();
+        }
+        Event::Key(KeyEvent {
+            code: KeyCode::Right,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => {
+            state.texteditor.forward();
+        }
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('a'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => state.texteditor.move_to_head(),
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('e'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => state.texteditor.move_to_tail(),
+
+        // Erase char(s).
+        Event::Key(KeyEvent {
+            code: KeyCode::Backspace,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => state.texteditor.erase(),
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('u'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => state.texteditor.erase_all(),
+
+        // Input char.
+        Event::Key(KeyEvent {
+            code: KeyCode::Char(ch),
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        })
+        | Event::Key(KeyEvent {
+            code: KeyCode::Char(ch),
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }) => match state.edit_mode {
+            text_editor::Mode::Insert => state.texteditor.insert(*ch),
+            text_editor::Mode::Overwrite => state.texteditor.overwrite(*ch),
+        },
+
+        _ => (),
     }
+    Ok(Signal::Continue)
 }
 
 pub async fn run(
     text_editor: text_editor::State,
     highlight_style: ContentStyle,
     retrieval_timeout: Duration,
-    render_interval: Duration,
+    render_interval: Option<Duration>,
     queue_capacity: usize,
     case_insensitive: bool,
     cmd: Option<String>,
 ) -> anyhow::Result<(Signal, VecDeque<String>)> {
-    let keymap = ActiveKeySwitcher::new("default", keymap::default);
     let size = crossterm::terminal::size()?;
 
     let pane = text_editor.create_pane(size.0, size.1);
@@ -93,22 +137,20 @@ pub async fn run(
     let readonly_text_editor = Arc::clone(&shared_text_editor);
 
     let (tx, mut rx) = mpsc::channel(1);
-    let canceler = CancellationToken::new();
 
-    let canceled = canceler.clone();
-    let streaming = if let Some(cmd) = cmd.clone() {
-        tokio::spawn(async move { cmd::execute(&cmd, tx, retrieval_timeout, canceled).await })
-    } else {
-        tokio::spawn(async move { stdin::streaming(tx, retrieval_timeout, canceled).await })
-    };
+    let input_task = match &cmd {
+        Some(cmd) => spawn::spawn_cmd_result_sender(cmd, tx, retrieval_timeout),
+        None => spawn::spawn_stdin_sender(tx, retrieval_timeout),
+    }?;
 
     let keeping: JoinHandle<anyhow::Result<VecDeque<String>>> = tokio::spawn(async move {
         let mut queue = VecDeque::with_capacity(queue_capacity);
-        let interval = time::interval(render_interval);
-        futures::pin_mut!(interval);
+        let mut maybe_interval = render_interval.map(|p| time::interval(p));
 
         loop {
-            interval.tick().await;
+            if let Some(interval) = &mut maybe_interval {
+                interval.tick().await;
+            }
             match rx.recv().await {
                 Some(line) => {
                     let text_editor = readonly_text_editor.read().await;
@@ -119,13 +161,13 @@ pub async fn run(
                     }
                     queue.push_back(line.clone());
 
-                    if let Some(styled) = styled(
+                    if let Some(highlighted) = highlight(
                         &text_editor.texteditor.text_without_cursor().to_string(),
                         &line,
                         highlight_style,
                         case_insensitive,
                     ) {
-                        let matrix = styled.matrixify(size.0 as usize, size.1 as usize, 0).0;
+                        let matrix = highlighted.matrixify(size.0 as usize, size.1 as usize, 0).0;
                         let term = readonly_term.read().await;
                         term.draw_stream_and_pane(
                             matrix,
@@ -143,7 +185,7 @@ pub async fn run(
     loop {
         let event = event::read()?;
         let mut text_editor = shared_text_editor.write().await;
-        signal = keymap.get()(&event, &mut text_editor, cmd.clone())?;
+        signal = evaluate_event(&event, &mut text_editor, cmd.clone())?;
         if signal == Signal::GotoArchived || signal == Signal::GotoStreaming {
             break;
         }
@@ -154,8 +196,10 @@ pub async fn run(
         term.draw_pane(&pane)?;
     }
 
-    canceler.cancel();
-    let _: anyhow::Result<(), anyhow::Error> = streaming.await?;
+    if let Some(mut child) = input_task.child {
+        let _ = child.kill().await;
+    }
+    input_task.handle.abort();
 
     Ok((signal, keeping.await??))
 }
