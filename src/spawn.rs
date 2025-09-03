@@ -78,11 +78,8 @@ pub fn spawn_cmd_result_sender(
                                 let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                                 tx.send(escaped).await?;
                             },
-                            // ignore timeout and continue
-                            Err(_) => {
-                                continue;
-                            },
-                            _ => break,
+                            // Don't break on stdout end, continue to read stderr (maybe)
+                            _ => continue,
                         }
                     },
                     stderr_res = timeout(retrieval_timeout, stderr_reader.next_line()) => {
@@ -91,16 +88,12 @@ pub fn spawn_cmd_result_sender(
                                 let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                                 tx.send(escaped).await?;
                             },
-                            // ignore timeout and continue
-                            Err(_) => {
-                                continue;
-                            },
-                            _ => break,
+                            // Don't break on stdout end, continue to read stdout (maybe)
+                            _ => continue,
                         }
                     }
                 }
             }
-            Ok(())
         }),
         child: Some(child),
     })

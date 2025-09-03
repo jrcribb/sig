@@ -170,8 +170,8 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        // Ensure the input task has completed
-        input_task.handle.await??;
+        // Stop the input task
+        input_task.handle.abort();
 
         crossterm::execute!(
             io::stdout(),
