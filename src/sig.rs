@@ -128,7 +128,7 @@ pub async fn run(
     let size = crossterm::terminal::size()?;
 
     let pane = text_editor.create_pane(size.0, size.1);
-    let mut term = Terminal::new(&pane)?;
+    let mut term = Terminal::new(size, &pane)?;
     term.draw_pane(&pane)?;
 
     let shared_term = Arc::new(RwLock::new(term));
@@ -168,11 +168,13 @@ pub async fn run(
                         case_insensitive,
                     ) {
                         let matrix = highlighted.matrixify(size.0 as usize, size.1 as usize, 0).0;
-                        let term = readonly_term.read().await;
-                        term.draw_stream_and_pane(
-                            matrix,
-                            &text_editor.create_pane(size.0, size.1),
-                        )?;
+                        let pane = text_editor.create_pane(size.0, size.1);
+                        let mut term = readonly_term.write().await;
+                        let pane_rows = Terminal::pane_rows(size, &pane);
+                        if term.sync_layout(size, pane_rows)? {
+                            term.draw_pane(&pane)?;
+                        }
+                        term.draw_stream(&matrix)?;
                     }
                 }
                 None => break,
@@ -193,6 +195,7 @@ pub async fn run(
         let size = crossterm::terminal::size()?;
         let pane = text_editor.create_pane(size.0, size.1);
         let mut term = shared_term.write().await;
+        term.sync_layout(size, Terminal::pane_rows(size, &pane))?;
         term.draw_pane(&pane)?;
     }
 
