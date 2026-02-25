@@ -8,6 +8,7 @@ use tokio::{
 
 use promkit_core::crossterm::{
     self, cursor, execute,
+    event::{DisableMouseCapture, EnableMouseCapture},
     style::{Color, ContentStyle},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
@@ -121,7 +122,7 @@ pub struct Args {
 impl Drop for Args {
     fn drop(&mut self) {
         disable_raw_mode().ok();
-        execute!(io::stdout(), cursor::Show).ok();
+        execute!(io::stdout(), DisableMouseCapture, cursor::Show).ok();
     }
 }
 
@@ -130,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     enable_raw_mode()?;
-    execute!(io::stdout(), cursor::Hide)?;
+    execute!(io::stdout(), EnableMouseCapture, cursor::Hide)?;
 
     let highlight_style = ContentStyle {
         foreground_color: Some(Color::Red),
@@ -267,7 +268,7 @@ async fn main() -> anyhow::Result<()> {
                     // Re-enable raw mode and hide the cursor again here
                     // because they are disabled and shown, respectively, by promkit.
                     enable_raw_mode()?;
-                    execute!(io::stdout(), cursor::Hide)?;
+                    execute!(io::stdout(), EnableMouseCapture, cursor::Hide)?;
 
                     crossterm::execute!(
                         io::stdout(),
