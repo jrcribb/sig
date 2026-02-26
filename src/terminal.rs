@@ -22,7 +22,8 @@ fn set_scroll_region_sequence(top_1based: u16, bottom_1based: u16) -> String {
 }
 
 impl Terminal {
-    pub fn new(size: (u16, u16), pane: &Pane) -> anyhow::Result<Self> {
+    /// Create a new Terminal instance and apply the initial scroll region.
+    pub fn try_new(size: (u16, u16), pane: &Pane) -> anyhow::Result<Self> {
         let term = Self {
             size,
             pane_rows: Self::pane_rows(size, pane),
