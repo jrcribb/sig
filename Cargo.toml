@@ -13,16 +13,16 @@ name = "sig"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.99"
-clap = { version = "4.5.47", features = ["derive"] }
-grep = "0.3.2"
+anyhow = "1.0.102"
+clap = { version = "4.5.60", features = ["derive"] }
+grep = "0.4.1"
 promkit = "0.10.1"
 promkit-core = "0.2.0"
 promkit-widgets = { version = "0.2.0", features = ["texteditor", "listbox"] }
 rayon = "1.11.0"
-regex = "1.11.2"
+regex = "1.12.3"
 strip-ansi-escapes = "0.2.1"
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
