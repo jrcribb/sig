@@ -70,30 +70,43 @@ pub fn spawn_cmd_result_sender(
 
     Ok(InputTask {
         handle: tokio::spawn(async move {
+            let mut stdout_closed = false;
+            let mut stderr_closed = false;
+
             loop {
+                if stdout_closed && stderr_closed {
+                    break;
+                }
+
                 tokio::select! {
-                    stdout_res = timeout(retrieval_timeout, stdout_reader.next_line()) => {
+                    stdout_res = timeout(retrieval_timeout, stdout_reader.next_line()), if !stdout_closed => {
                         match stdout_res {
                             Ok(Ok(Some(line))) => {
                                 let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                                 tx.send(escaped).await?;
                             },
-                            // Don't break on stdout end, continue to read stderr (maybe)
-                            _ => continue,
+                            Ok(Ok(None)) => stdout_closed = true,
+                            Ok(Err(err)) => return Err(err.into()),
+                            // ignore timeout and continue
+                            Err(_) => continue,
                         }
                     },
-                    stderr_res = timeout(retrieval_timeout, stderr_reader.next_line()) => {
+                    stderr_res = timeout(retrieval_timeout, stderr_reader.next_line()), if !stderr_closed => {
                         match stderr_res {
                             Ok(Ok(Some(line))) => {
                                 let escaped = strip_ansi_escapes::strip_str(line.replace(['\n', '\t'], " "));
                                 tx.send(escaped).await?;
                             },
-                            // Don't break on stdout end, continue to read stdout (maybe)
-                            _ => continue,
+                            Ok(Ok(None)) => stderr_closed = true,
+                            Ok(Err(err)) => return Err(err.into()),
+                            // ignore timeout and continue
+                            Err(_) => continue,
                         }
                     }
                 }
             }
+
+            Ok(())
         }),
         child: Some(child),
     })

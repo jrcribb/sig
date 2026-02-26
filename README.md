@@ -28,8 +28,8 @@ Interactive grep
     and it is possible to switch to a mode
     where you can grep through these N entries
     based on key inputs at any given moment.
-  - Additionally, by starting in this mode,
-    it is also possible to grep through static data such as files.
+  - For static data such as files, *sig* automatically switches
+    to archived mode when the input reaches EOF.
     - like [ugrep](https://github.com/Genivia/ugrep) with `-Q` option.
 
 ## Installation
@@ -76,7 +76,7 @@ nix shell github:ynqa/sig
 
 Or run it directly:
 ```nix
-cat README.md | nix run github:ynqa/sig -- --archived
+cat README.md | nix run github:ynqa/sig
 ```
 
 ### Nix (classic)
@@ -109,12 +109,9 @@ stern --context kind-kind etcd |& sig
 sig --cmd "stern --context kind-kind etcd" # this is able to retry command by ctrl+r.
 ```
 
-### Archived mode
-
+Static input (switches to archived view after EOF):
 ```bash
-cat README.md |& sig -a
-# or
-sig -a --cmd "cat README.md"
+cat README.md |& sig
 ```
 
 ## Keymap
@@ -156,10 +153,8 @@ $ stern --context kind-kind etcd |& sig
 Or the method to retry command by pressing ctrl+r:
 $ sig --cmd "stern --context kind-kind etcd"
 
-Archived mode:
-$ cat README.md |& sig -a
-Or
-$ sig -a --cmd "cat README.md"
+Static input (switches to archived view after EOF):
+$ cat README.md |& sig
 
 Options:
       --retrieval-timeout <RETRIEVAL_TIMEOUT_MILLIS>
@@ -168,8 +163,6 @@ Options:
           Interval to render a line in milliseconds.
   -q, --queue-capacity <QUEUE_CAPACITY>
           Queue capacity to store lines. [default: 1000]
-  -a, --archived
-          Archived mode to grep through static data.
   -i, --ignore-case
           Case insensitive search.
       --cmd <CMD>
