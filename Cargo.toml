@@ -1,6 +1,6 @@
 [package]
 name = "sigrs"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["ynqa <un.pensiero.vano@gmail.com>"]
 edition = "2021"
 description = "Interactive grep (for streaming)"
@@ -27,4 +27,5 @@ tokio = { version = "1.49.0", features = ["full"] }
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
-lto = "thin"
+codegen-units = 1
+lto = true
