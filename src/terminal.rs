@@ -87,6 +87,8 @@ impl Terminal {
         Ok(())
     }
 
+    /// Sync the terminal layout with the given size and pane rows.
+    /// Returns true if the layout was changed and the pane needs to be redrawn.
     pub fn sync_layout(&mut self, size: (u16, u16), pane_rows: u16) -> anyhow::Result<bool> {
         let pane_rows = pane_rows.min(size.1);
         if self.size == size && self.pane_rows == pane_rows {
