@@ -64,8 +64,25 @@ impl Terminal {
         Ok(())
     }
 
+    /// Draw the pane content.
+    /// This should be called after syncing the layout to ensure the pane area is correctly sized.
     pub fn draw_pane(&mut self, pane: &Pane) -> anyhow::Result<()> {
-        self.redraw_pane_rows(pane)?;
+        for y in 0..self.pane_rows {
+            crossterm::queue!(
+                io::stdout(),
+                cursor::MoveTo(0, y),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+            )?;
+        }
+
+        for (y, row) in pane.extract(self.pane_rows as usize).iter().enumerate() {
+            crossterm::queue!(
+                io::stdout(),
+                cursor::MoveTo(0, y as u16),
+                style::Print(row.styled_display()),
+            )?;
+        }
+
         io::stdout().flush()?;
         Ok(())
     }
@@ -93,25 +110,6 @@ impl Terminal {
 
     fn stream_height(&self) -> u16 {
         self.size.1.saturating_sub(self.pane_rows)
-    }
-
-    fn redraw_pane_rows(&self, pane: &Pane) -> anyhow::Result<()> {
-        for y in 0..self.pane_rows {
-            crossterm::queue!(
-                io::stdout(),
-                cursor::MoveTo(0, y),
-                terminal::Clear(terminal::ClearType::CurrentLine),
-            )?;
-        }
-
-        for (y, row) in pane.extract(self.pane_rows as usize).iter().enumerate() {
-            crossterm::queue!(
-                io::stdout(),
-                cursor::MoveTo(0, y as u16),
-                style::Print(row.styled_display()),
-            )?;
-        }
-        Ok(())
     }
 
     fn clear_stream_area(&self) -> anyhow::Result<()> {
