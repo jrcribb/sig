@@ -33,6 +33,7 @@ impl Terminal {
         Ok(term)
     }
 
+    /// Draw the stream content, which is displayed below the pane.
     pub fn draw_stream(&mut self, items: &[StyledGraphemes]) -> anyhow::Result<()> {
         let stream_height = self.stream_height();
         if items.is_empty() || stream_height == 0 {
@@ -42,6 +43,14 @@ impl Terminal {
 
         let visible_rows = items.len().min(stream_height as usize);
         let start = items.len().saturating_sub(visible_rows);
+        // Note: This view intentionally keeps only the tail of `items` that fits in the stream area.
+        // The trade-off is that older rows are dropped from the current frame
+        // when incoming data exceeds the stream height.
+        // In this realtime UI, we accept that loss because such overflow already exceeds
+        // what a human can read at once
+        // and tail-first rendering keeps behavior predictable under high throughput.
+        //
+        // If users need to re-check past matches, guide them to Archived mode (Ctrl+F).
         let rows = &items[start..];
         let scroll_rows = rows.len() as u16;
         let write_from = self.size.1.saturating_sub(scroll_rows);
