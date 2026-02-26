@@ -116,20 +116,23 @@ impl Terminal {
 
     fn apply_scroll_region(&self) -> anyhow::Result<()> {
         if self.stream_height() == 0 {
-            crossterm::queue!(io::stdout(), style::Print("\x1b[r"))?;
+            crossterm::queue!(io::stdout(), style::Print(crossterm::csi!("r")))?;
             return Ok(());
         }
 
         let top = self.stream_top() + 1;
         let bottom = self.size.1;
-        crossterm::queue!(io::stdout(), style::Print(format!("\x1b[{top};{bottom}r")))?;
+        crossterm::queue!(
+            io::stdout(),
+            style::Print(format!(crossterm::csi!("{};{}r"), top, bottom)),
+        )?;
         Ok(())
     }
 }
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        let _ = crossterm::queue!(io::stdout(), style::Print("\x1b[r"));
+        let _ = crossterm::queue!(io::stdout(), style::Print(crossterm::csi!("r")));
         let _ = io::stdout().flush();
     }
 }
