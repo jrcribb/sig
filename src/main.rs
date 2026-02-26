@@ -7,8 +7,9 @@ use tokio::{
 };
 
 use promkit_core::crossterm::{
-    self, cursor, execute,
+    self, cursor,
     event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
     style::{Color, ContentStyle},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
