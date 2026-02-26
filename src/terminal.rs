@@ -11,6 +11,16 @@ pub struct Terminal {
     pane_rows: u16,
 }
 
+/// Reset the scroll region to the entire terminal.
+fn reset_scroll_region_sequence() -> &'static str {
+    crossterm::csi!("r")
+}
+
+/// Set the scroll region to [top, bottom], where both are 1-based.
+fn set_scroll_region_sequence(top_1based: u16, bottom_1based: u16) -> String {
+    format!(crossterm::csi!("{};{}r"), top_1based, bottom_1based)
+}
+
 impl Terminal {
     pub fn new(size: (u16, u16), pane: &Pane) -> anyhow::Result<Self> {
         let term = Self {
@@ -114,17 +124,23 @@ impl Terminal {
         Ok(())
     }
 
+    /// Apply the scroll region to the stream area, excluding the pane area.
     fn apply_scroll_region(&self) -> anyhow::Result<()> {
         if self.stream_height() == 0 {
-            crossterm::queue!(io::stdout(), style::Print(crossterm::csi!("r")))?;
+            crossterm::queue!(
+                io::stdout(),
+                style::Print(reset_scroll_region_sequence()),
+            )?;
             return Ok(());
         }
 
         let top = self.stream_top() + 1;
         let bottom = self.size.1;
+        // Exclude the pane area from the scroll region,
+        // so that only the stream area is scrolled when new lines are added.
         crossterm::queue!(
             io::stdout(),
-            style::Print(format!(crossterm::csi!("{};{}r"), top, bottom)),
+            style::Print(set_scroll_region_sequence(top, bottom)),
         )?;
         Ok(())
     }
@@ -132,7 +148,7 @@ impl Terminal {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        let _ = crossterm::queue!(io::stdout(), style::Print(crossterm::csi!("r")));
+        let _ = crossterm::queue!(io::stdout(), style::Print(reset_scroll_region_sequence()));
         let _ = io::stdout().flush();
     }
 }
