@@ -120,6 +120,7 @@ cat README.md |& sig
 | :-                   | :-
 | <kbd>Ctrl + C</kbd>  | Exit `sig`
 | <kbd>Ctrl + R</kbd>  | Retry command if `--cmd` is specified
+| <kbd>Ctrl + S</kbd>  | Pause/Resume stream ingestion
 | <kbd>Ctrl + F</kbd>  | Enter Archived mode
 | <kbd>←</kbd>         | Move the cursor one character to the left
 | <kbd>→</kbd>         | Move the cursor one character to the right
