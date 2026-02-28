@@ -25,7 +25,7 @@ enum InputAction {
     GotoStreaming,
 }
 
-// Evaluate a key event and return the corresponding Signal.
+// Evaluate a key event and return the corresponding InputAction.
 fn evaluate_event(
     event: &Event,
     state: &mut text_editor::State,
