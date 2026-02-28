@@ -137,10 +137,7 @@ impl Terminal {
     /// Apply the scroll region to the stream area, excluding the pane area.
     fn apply_scroll_region(&self) -> anyhow::Result<()> {
         if self.stream_height() == 0 {
-            crossterm::queue!(
-                io::stdout(),
-                style::Print(reset_scroll_region_sequence()),
-            )?;
+            crossterm::queue!(io::stdout(), style::Print(reset_scroll_region_sequence()),)?;
             return Ok(());
         }
 
