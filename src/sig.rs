@@ -128,7 +128,7 @@ pub async fn run(
     let size = crossterm::terminal::size()?;
 
     let pane = text_editor.create_pane(size.0, size.1);
-    let mut term = Terminal::try_new(size, &pane)?;
+    let term = Terminal::try_new(size, &pane)?;
     term.draw_pane(&pane)?;
 
     let shared_term = Arc::new(RwLock::new(term));

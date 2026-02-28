@@ -34,7 +34,7 @@ impl Terminal {
     }
 
     /// Draw the stream content, which is displayed below the pane.
-    pub fn draw_stream(&mut self, items: &[StyledGraphemes]) -> anyhow::Result<()> {
+    pub fn draw_stream(&self, items: &[StyledGraphemes]) -> anyhow::Result<()> {
         let stream_height = self.stream_height();
         if items.is_empty() || stream_height == 0 {
             io::stdout().flush()?;
@@ -75,7 +75,7 @@ impl Terminal {
 
     /// Draw the pane content.
     /// This should be called after syncing the layout to ensure the pane area is correctly sized.
-    pub fn draw_pane(&mut self, pane: &Pane) -> anyhow::Result<()> {
+    pub fn draw_pane(&self, pane: &Pane) -> anyhow::Result<()> {
         for y in 0..self.pane_rows {
             crossterm::queue!(
                 io::stdout(),
