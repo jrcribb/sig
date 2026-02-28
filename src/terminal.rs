@@ -23,10 +23,10 @@ fn set_scroll_region_sequence(top_1based: u16, bottom_1based: u16) -> String {
 
 impl Terminal {
     /// Create a new Terminal instance and apply the initial scroll region.
-    pub fn try_new(size: (u16, u16), pane: &Pane) -> anyhow::Result<Self> {
+    pub fn try_new(size: (u16, u16), panes: &[Pane]) -> anyhow::Result<Self> {
         let term = Self {
             size,
-            pane_rows: Self::pane_rows(size, pane),
+            pane_rows: Self::pane_rows(size, panes),
         };
         term.apply_scroll_region()?;
         io::stdout().flush()?;
@@ -37,6 +37,20 @@ impl Terminal {
     pub fn draw_stream(&self, items: &[StyledGraphemes]) -> anyhow::Result<()> {
         let stream_height = self.stream_height();
         if items.is_empty() || stream_height == 0 {
+            io::stdout().flush()?;
+            return Ok(());
+        }
+
+        // With a 1-line stream area (e.g. terminal height 3),
+        // render directly instead of scrolling to keep pane rows stable.
+        if stream_height == 1 {
+            let row = items.last().expect("checked non-empty items");
+            crossterm::queue!(
+                io::stdout(),
+                cursor::MoveTo(0, self.stream_top()),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+                style::Print(row.styled_display()),
+            )?;
             io::stdout().flush()?;
             return Ok(());
         }
@@ -75,7 +89,7 @@ impl Terminal {
 
     /// Draw the pane content.
     /// This should be called after syncing the layout to ensure the pane area is correctly sized.
-    pub fn draw_pane(&self, pane: &Pane) -> anyhow::Result<()> {
+    pub fn draw_pane(&self, panes: &[Pane]) -> anyhow::Result<()> {
         for y in 0..self.pane_rows {
             crossterm::queue!(
                 io::stdout(),
@@ -84,12 +98,24 @@ impl Terminal {
             )?;
         }
 
-        for (y, row) in pane.extract(self.pane_rows as usize).iter().enumerate() {
-            crossterm::queue!(
-                io::stdout(),
-                cursor::MoveTo(0, y as u16),
-                style::Print(row.styled_display()),
-            )?;
+        let mut y = 0u16;
+        for pane in panes {
+            if y >= self.pane_rows {
+                break;
+            }
+
+            let viewport_height = (self.pane_rows - y) as usize;
+            for row in pane.extract(viewport_height) {
+                if y >= self.pane_rows {
+                    break;
+                }
+                crossterm::queue!(
+                    io::stdout(),
+                    cursor::MoveTo(0, y),
+                    style::Print(row.styled_display()),
+                )?;
+                y += 1;
+            }
         }
 
         io::stdout().flush()?;
@@ -111,8 +137,13 @@ impl Terminal {
         Ok(true)
     }
 
-    pub fn pane_rows(size: (u16, u16), pane: &Pane) -> u16 {
-        (pane.visible_row_count() as u16).min(size.1)
+    pub fn pane_rows(size: (u16, u16), panes: &[Pane]) -> u16 {
+        panes
+            .iter()
+            .fold(0usize, |acc, pane| {
+                acc.saturating_add(pane.visible_row_count())
+            })
+            .min(size.1 as usize) as u16
     }
 
     fn stream_top(&self) -> u16 {
