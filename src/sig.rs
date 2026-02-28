@@ -187,10 +187,22 @@ pub async fn run(
 
         loop {
             if paused {
-                if pause_rx.changed().await.is_err() {
-                    break;
+                tokio::select! {
+                    biased;
+                    changed = pause_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        paused = *pause_rx.borrow_and_update();
+                    }
+                    maybe_line = rx.recv() => {
+                        // Even while paused, observe EOF so the task can terminate.
+                        if maybe_line.is_none() {
+                            break;
+                        }
+                        // Ignore incoming lines while paused.
+                    }
                 }
-                paused = *pause_rx.borrow_and_update();
                 continue;
             }
 
