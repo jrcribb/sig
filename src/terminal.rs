@@ -41,6 +41,20 @@ impl Terminal {
             return Ok(());
         }
 
+        // With a 1-line stream area (e.g. terminal height 3),
+        // render directly instead of scrolling to keep pane rows stable.
+        if stream_height == 1 {
+            let row = items.last().expect("checked non-empty items");
+            crossterm::queue!(
+                io::stdout(),
+                cursor::MoveTo(0, self.stream_top()),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+                style::Print(row.styled_display()),
+            )?;
+            io::stdout().flush()?;
+            return Ok(());
+        }
+
         let visible_rows = items.len().min(stream_height as usize);
         let start = items.len().saturating_sub(visible_rows);
         // Note: This view intentionally keeps only the tail of `items` that fits in the stream area.
