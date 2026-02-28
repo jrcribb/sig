@@ -207,7 +207,19 @@ pub async fn run(
             }
 
             if let Some(interval) = &mut maybe_interval {
-                interval.tick().await;
+                tokio::select! {
+                    biased;
+                    changed = pause_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        paused = *pause_rx.borrow_and_update();
+                        continue;
+                    }
+                    _ = interval.tick() => {
+                        // Proceed to input handling after the interval tick.
+                    }
+                }
             }
 
             tokio::select! {
