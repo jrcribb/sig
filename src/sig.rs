@@ -186,6 +186,10 @@ pub async fn run(
         let mut paused = false;
 
         loop {
+            // While paused:
+            // - Keep watching pause state changes so resume is immediate.
+            // - Keep watching the input channel to detect EOF and terminate cleanly.
+            //   Incoming lines are intentionally dropped while paused.
             if paused {
                 tokio::select! {
                     biased;
@@ -206,6 +210,9 @@ pub async fn run(
                 continue;
             }
 
+            // When render throttling is enabled:
+            // - Wait for the next render tick before processing input.
+            // - Allow pause changes to interrupt the wait so Ctrl+S stays responsive.
             if let Some(interval) = &mut maybe_interval {
                 tokio::select! {
                     biased;
