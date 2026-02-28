@@ -183,13 +183,21 @@ pub async fn run(
         Ok(queue)
     });
 
-    let mut signal: Signal;
-    loop {
+    let signal = loop {
+        // Treat an exhausted input source as archived data.
+        if keeping.is_finished() {
+            break Signal::GotoArchived;
+        }
+
+        if !event::poll(retrieval_timeout)? {
+            continue;
+        }
+
         let event = event::read()?;
         let mut text_editor = shared_text_editor.write().await;
-        signal = evaluate_event(&event, &mut text_editor, cmd.clone())?;
+        let signal = evaluate_event(&event, &mut text_editor, cmd.clone())?;
         if signal == Signal::GotoArchived || signal == Signal::GotoStreaming {
-            break;
+            break signal;
         }
 
         let size = crossterm::terminal::size()?;
@@ -197,7 +205,7 @@ pub async fn run(
         let mut term = shared_term.write().await;
         term.sync_layout(size, Terminal::pane_rows(size, &pane))?;
         term.draw_pane(&pane)?;
-    }
+    };
 
     if let Some(mut child) = input_task.child {
         let _ = child.kill().await;
