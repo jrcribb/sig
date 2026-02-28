@@ -10,11 +10,12 @@ use promkit_core::{
     crossterm::{
         self,
         event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers},
-        style::ContentStyle,
+        style::{Color, ContentStyle},
     },
+    pane::Pane,
     PaneFactory,
 };
-use promkit_widgets::text_editor;
+use promkit_widgets::{text, text_editor};
 
 use crate::{highlight::highlight, spawn, terminal::Terminal, Signal};
 
@@ -29,7 +30,7 @@ enum InputAction {
 fn evaluate_event(
     event: &Event,
     state: &mut text_editor::State,
-    cmd: Option<String>,
+    has_cmd: bool,
 ) -> anyhow::Result<InputAction> {
     match event {
         Event::Key(KeyEvent {
@@ -45,7 +46,7 @@ fn evaluate_event(
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         }) => {
-            if cmd.is_some() {
+            if has_cmd {
                 return Ok(InputAction::GotoStreaming);
             }
         }
@@ -130,6 +131,26 @@ fn evaluate_event(
     Ok(InputAction::Continue)
 }
 
+fn create_panes(text_editor: &text_editor::State, size: (u16, u16), has_cmd: bool) -> Vec<Pane> {
+    let retry_hint = if has_cmd { " | Ctrl+R Retry" } else { "" };
+    let hint = text::State {
+        text: text::Text::from(format!(
+            "Ctrl+F Archived | Ctrl+S Pause/Resume{} | Ctrl+C Exit",
+            retry_hint
+        )),
+        style: ContentStyle {
+            foreground_color: Some(Color::DarkGrey),
+            ..Default::default()
+        },
+        lines: Some(1),
+    };
+
+    vec![
+        text_editor.create_pane(size.0, size.1),
+        hint.create_pane(size.0, size.1),
+    ]
+}
+
 pub async fn run(
     text_editor: text_editor::State,
     highlight_style: ContentStyle,
@@ -140,10 +161,11 @@ pub async fn run(
     cmd: Option<String>,
 ) -> anyhow::Result<(Signal, VecDeque<String>)> {
     let size = crossterm::terminal::size()?;
+    let has_cmd = cmd.is_some();
 
-    let pane = text_editor.create_pane(size.0, size.1);
-    let term = Terminal::try_new(size, &pane)?;
-    term.draw_pane(&pane)?;
+    let panes = create_panes(&text_editor, size, has_cmd);
+    let term = Terminal::try_new(size, &panes)?;
+    term.draw_pane(&panes)?;
 
     let shared_term = Arc::new(RwLock::new(term));
     let shared_text_editor = Arc::new(RwLock::new(text_editor));
@@ -202,11 +224,11 @@ pub async fn run(
                                 case_insensitive,
                             ) {
                                 let matrix = highlighted.matrixify(size.0 as usize, size.1 as usize, 0).0;
-                                let pane = text_editor.create_pane(size.0, size.1);
+                                let panes = create_panes(&text_editor, size, has_cmd);
                                 let mut term = readonly_term.write().await;
-                                let pane_rows = Terminal::pane_rows(size, &pane);
+                                let pane_rows = Terminal::pane_rows(size, &panes);
                                 if term.sync_layout(size, pane_rows)? {
-                                    term.draw_pane(&pane)?;
+                                    term.draw_pane(&panes)?;
                                 }
                                 term.draw_stream(&matrix)?;
                             }
@@ -232,7 +254,7 @@ pub async fn run(
 
         let event = event::read()?;
         let mut text_editor = shared_text_editor.write().await;
-        let action = evaluate_event(&event, &mut text_editor, cmd.clone())?;
+        let action = evaluate_event(&event, &mut text_editor, has_cmd)?;
         match action {
             InputAction::GotoArchived => break Signal::GotoArchived,
             InputAction::GotoStreaming => break Signal::GotoStreaming,
@@ -244,10 +266,10 @@ pub async fn run(
         }
 
         let size = crossterm::terminal::size()?;
-        let pane = text_editor.create_pane(size.0, size.1);
+        let panes = create_panes(&text_editor, size, has_cmd);
         let mut term = shared_term.write().await;
-        term.sync_layout(size, Terminal::pane_rows(size, &pane))?;
-        term.draw_pane(&pane)?;
+        term.sync_layout(size, Terminal::pane_rows(size, &panes))?;
+        term.draw_pane(&panes)?;
     };
 
     if let Some(mut child) = input_task.child {
