@@ -17,7 +17,13 @@ use promkit_core::{
 };
 use promkit_widgets::{text, text_editor};
 
-use crate::{highlight::highlight, spawn, terminal::Terminal, Signal};
+use crate::{
+    config::{matches_keybind, StreamingKeybinds},
+    highlight::highlight,
+    spawn,
+    terminal::Terminal,
+    Signal,
+};
 
 enum InputAction {
     Continue,
@@ -31,84 +37,55 @@ fn evaluate_event(
     event: &Event,
     state: &mut text_editor::State,
     has_cmd: bool,
+    keybinds: &StreamingKeybinds,
 ) -> anyhow::Result<InputAction> {
+    if matches_keybind(event, &keybinds.goto_archived) {
+        return Ok(InputAction::GotoArchived);
+    }
+
+    if has_cmd && matches_keybind(event, &keybinds.retry) {
+        return Ok(InputAction::GotoStreaming);
+    }
+
+    if matches_keybind(event, &keybinds.toggle_pause) {
+        return Ok(InputAction::TogglePause);
+    }
+
+    if matches_keybind(event, &keybinds.exit) {
+        return Err(anyhow::anyhow!("exit"));
+    }
+
+    if matches_keybind(event, &keybinds.editor.backward) {
+        state.texteditor.backward();
+        return Ok(InputAction::Continue);
+    }
+
+    if matches_keybind(event, &keybinds.editor.forward) {
+        state.texteditor.forward();
+        return Ok(InputAction::Continue);
+    }
+
+    if matches_keybind(event, &keybinds.editor.move_to_head) {
+        state.texteditor.move_to_head();
+        return Ok(InputAction::Continue);
+    }
+
+    if matches_keybind(event, &keybinds.editor.move_to_tail) {
+        state.texteditor.move_to_tail();
+        return Ok(InputAction::Continue);
+    }
+
+    if matches_keybind(event, &keybinds.editor.erase) {
+        state.texteditor.erase();
+        return Ok(InputAction::Continue);
+    }
+
+    if matches_keybind(event, &keybinds.editor.erase_all) {
+        state.texteditor.erase_all();
+        return Ok(InputAction::Continue);
+    }
+
     match event {
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('f'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => return Ok(InputAction::GotoArchived),
-
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('r'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => {
-            if has_cmd {
-                return Ok(InputAction::GotoStreaming);
-            }
-        }
-
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('s'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => return Ok(InputAction::TogglePause),
-
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('c'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => return Err(anyhow::anyhow!("ctrl+c")),
-
-        // Move cursor.
-        Event::Key(KeyEvent {
-            code: KeyCode::Left,
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => {
-            state.texteditor.backward();
-        }
-        Event::Key(KeyEvent {
-            code: KeyCode::Right,
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => {
-            state.texteditor.forward();
-        }
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('a'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => state.texteditor.move_to_head(),
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('e'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => state.texteditor.move_to_tail(),
-
-        // Erase char(s).
-        Event::Key(KeyEvent {
-            code: KeyCode::Backspace,
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => state.texteditor.erase(),
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('u'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }) => state.texteditor.erase_all(),
-
         // Input char.
         Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
@@ -132,12 +109,9 @@ fn evaluate_event(
 }
 
 fn create_panes(text_editor: &text_editor::State, size: (u16, u16), has_cmd: bool) -> Vec<Pane> {
-    let retry_hint = if has_cmd { " | Ctrl+R Retry" } else { "" };
+    let retry_hint = if has_cmd { " | Retry" } else { "" };
     let hint = text::State {
-        text: text::Text::from(format!(
-            "Ctrl+F Archived | Ctrl+S Pause/Resume{} | Ctrl+C Exit",
-            retry_hint
-        )),
+        text: text::Text::from(format!("Archived | Pause/Resume{} | Exit", retry_hint)),
         style: ContentStyle {
             foreground_color: Some(Color::DarkGrey),
             ..Default::default()
@@ -154,6 +128,7 @@ fn create_panes(text_editor: &text_editor::State, size: (u16, u16), has_cmd: boo
 pub async fn run(
     text_editor: text_editor::State,
     highlight_style: ContentStyle,
+    keybinds: StreamingKeybinds,
     retrieval_timeout: Duration,
     render_interval: Option<Duration>,
     queue_capacity: usize,
@@ -285,7 +260,7 @@ pub async fn run(
 
         let event = event::read()?;
         let mut text_editor = shared_text_editor.write().await;
-        let action = evaluate_event(&event, &mut text_editor, has_cmd)?;
+        let action = evaluate_event(&event, &mut text_editor, has_cmd, &keybinds)?;
         match action {
             InputAction::GotoArchived => break Signal::GotoArchived,
             InputAction::GotoStreaming => break Signal::GotoStreaming,

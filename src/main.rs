@@ -1,5 +1,6 @@
-use std::io;
+use std::{io, io::Write, path::PathBuf};
 
+use anyhow::anyhow;
 use clap::Parser;
 use tokio::time::Duration;
 
@@ -7,19 +8,17 @@ use promkit_core::crossterm::{
     self, cursor,
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    style::{Color, ContentStyle},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use promkit_widgets::{
-    listbox,
-    text_editor::{self, TextEditor},
-};
+use promkit_widgets::listbox;
 
 mod archived;
+mod config;
 mod highlight;
 mod sig;
 mod spawn;
 mod terminal;
+use config::{Config, DEFAULT_CONFIG};
 
 #[derive(Eq, PartialEq)]
 pub enum Signal {
@@ -105,6 +104,9 @@ pub struct Args {
         in the text editor when the program starts."
     )]
     pub query: Option<String>,
+
+    #[arg(short = 'c', long = "config", help = "Path to the configuration file.")]
+    pub config_file: Option<PathBuf>,
 }
 
 impl Drop for Args {
@@ -114,33 +116,61 @@ impl Drop for Args {
     }
 }
 
+/// Ensure that the specified file exists.
+/// If it does not exist, creates the file and its parent directories if necessary,
+/// and writes the default configuration content to it.
+fn ensure_file_exists(path: &PathBuf) -> anyhow::Result<()> {
+    if path.exists() {
+        return Ok(());
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| anyhow!("Failed to create directory: {e}"))?;
+    }
+
+    std::fs::File::create(path)?.write_all(DEFAULT_CONFIG.as_bytes())?;
+    Ok(())
+}
+
+/// Determine the configuration file path.
+fn determine_config_file(config_path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    if let Some(path) = config_path {
+        ensure_file_exists(&path)?;
+        return Ok(path);
+    }
+
+    let default_path = dirs::config_dir()
+        .ok_or_else(|| anyhow!("Failed to determine the configuration directory"))?
+        .join("sig")
+        .join("config.toml");
+
+    ensure_file_exists(&default_path)?;
+    Ok(default_path)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    let config = determine_config_file(args.config_file.clone())
+        .and_then(|config_file| {
+            std::fs::read_to_string(&config_file)
+                .map_err(|e| anyhow!("Failed to read configuration file: {e}"))
+        })
+        .and_then(|content| Config::load_from(&content))
+        .unwrap_or_else(|_e| {
+            Config::load_from(DEFAULT_CONFIG).expect("Failed to load default configuration")
+        });
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnableMouseCapture, cursor::Hide)?;
 
-    let highlight_style = ContentStyle {
-        foreground_color: Some(Color::Red),
-        ..Default::default()
-    };
-
     while let Ok((signal, queue)) = sig::run(
-        text_editor::State {
-            texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
-            prefix: String::from("❯❯ "),
-            prefix_style: ContentStyle {
-                foreground_color: Some(Color::DarkGreen),
-                ..Default::default()
-            },
-            active_char_style: ContentStyle {
-                background_color: Some(Color::DarkCyan),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        highlight_style,
+        config
+            .streaming
+            .editor
+            .to_state(args.query.clone().unwrap_or_default()),
+        config.highlight_style,
+        config.streaming.keybinds.clone(),
         Duration::from_millis(args.retrieval_timeout_millis),
         args.render_interval_millis.map(Duration::from_millis),
         args.queue_capacity,
@@ -158,26 +188,13 @@ async fn main() -> anyhow::Result<()> {
         match signal {
             Signal::GotoArchived => {
                 archived::run(
-                    text_editor::State {
-                        prefix: String::from("❯❯❯ "),
-                        prefix_style: ContentStyle {
-                            foreground_color: Some(Color::DarkBlue),
-                            ..Default::default()
-                        },
-                        active_char_style: ContentStyle {
-                            background_color: Some(Color::DarkCyan),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    },
-                    listbox::State {
-                        listbox: listbox::Listbox::from_displayable(queue),
-                        cursor: String::from("❯ "),
-                        active_item_style: None,
-                        inactive_item_style: None,
-                        lines: Default::default(),
-                    },
-                    highlight_style,
+                    config.archived.editor.to_state(String::new()),
+                    config
+                        .archived
+                        .listbox
+                        .to_state(listbox::Listbox::from_displayable(queue)),
+                    config.highlight_style,
+                    config.archived.keybinds.clone(),
                     args.case_insensitive,
                     args.cmd.clone(),
                 )

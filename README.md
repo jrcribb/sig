@@ -114,6 +114,15 @@ Static input (switches to archived view after EOF):
 cat README.md |& sig
 ```
 
+Configuration file:
+```bash
+# default: ~/.config/sig/config.toml (created automatically on first run)
+sig
+
+# use a custom file path
+sig --config /path/to/config.toml
+```
+
 ## Keymap
 
 | Key                  | Action
@@ -170,6 +179,8 @@ Options:
           Command to execute on initial and retries.
   -Q, --query <QUERY>
           Initial query.
+  -c, --config <CONFIG_FILE>
+          Path to the configuration file.
   -h, --help
           Print help (see more with '--help')
   -V, --version
