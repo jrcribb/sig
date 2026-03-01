@@ -165,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
         });
 
     enable_raw_mode()?;
-    execute!(io::stdout(), EnableMouseCapture, cursor::Hide)?;
+    execute!(io::stdout(), cursor::Hide)?;
 
     while let Ok((signal, queue)) = sig::run(
         text_editor::State {
@@ -191,6 +191,8 @@ async fn main() -> anyhow::Result<()> {
 
         match signal {
             Signal::GotoArchived => {
+                execute!(io::stdout(), EnableMouseCapture)?;
+
                 archived::run(
                     text_editor::State {
                         texteditor: TextEditor::new(String::new()),
@@ -211,7 +213,7 @@ async fn main() -> anyhow::Result<()> {
                 // Re-enable raw mode and hide the cursor again here
                 // because they are disabled and shown, respectively, by promkit.
                 enable_raw_mode()?;
-                execute!(io::stdout(), EnableMouseCapture, cursor::Hide)?;
+                execute!(io::stdout(), DisableMouseCapture, cursor::Hide)?;
 
                 crossterm::execute!(
                     io::stdout(),
