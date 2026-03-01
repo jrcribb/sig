@@ -107,10 +107,8 @@ in
 stern --context kind-kind etcd |& sig
 # or
 sig --cmd "stern --context kind-kind etcd" # this is able to retry command by ctrl+r.
-```
 
-Static input (switches to archived view after EOF):
-```bash
+# or static input (switches to archived view after EOF)
 cat README.md |& sig
 ```
 
@@ -170,8 +168,72 @@ Options:
           Command to execute on initial and retries.
   -Q, --query <QUERY>
           Initial query.
+  -c, --config <CONFIG_FILE>
+          Path to the configuration file.
   -h, --help
           Print help (see more with '--help')
   -V, --version
           Print version
 ```
+
+## Configuration
+
+<details>
+<summary>The following settings are available in config.toml</summary>
+
+```toml
+# Style for matched substrings
+highlight_style = "fg=red"
+
+[streaming.editor]
+# Query prompt while streaming
+prefix = "❯❯ "
+prefix_style = "fg=darkgreen"
+active_char_style = "bg=darkcyan"
+inactive_char_style = ""
+# lines =
+
+[streaming.keybinds]
+exit = ["Ctrl+C"]
+goto_archived = ["Ctrl+F"]
+retry = ["Ctrl+R"]
+toggle_pause = ["Ctrl+S"]
+
+[streaming.keybinds.editor]
+backward = ["Left"]
+forward = ["Right"]
+move_to_head = ["Ctrl+A"]
+move_to_tail = ["Ctrl+E"]
+erase = ["Backspace"]
+erase_all = ["Ctrl+U"]
+
+[archived.editor]
+# Query prompt in archived mode
+prefix = "❯❯❯ "
+prefix_style = "fg=darkblue"
+active_char_style = "bg=darkcyan"
+inactive_char_style = ""
+# lines =
+
+[archived.listbox]
+cursor = "❯ "
+# active_item_style =
+# inactive_item_style =
+# lines =
+
+[archived.keybinds]
+exit = ["Ctrl+C"]
+retry = ["Ctrl+R"]
+up = ["Up", "ScrollUp"]
+down = ["Down", "ScrollDown"]
+
+[archived.keybinds.editor]
+backward = ["Left"]
+forward = ["Right"]
+move_to_head = ["Ctrl+A"]
+move_to_tail = ["Ctrl+E"]
+erase = ["Backspace"]
+erase_all = ["Ctrl+U"]
+```
+
+</details>
