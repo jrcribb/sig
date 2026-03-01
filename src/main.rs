@@ -10,7 +10,10 @@ use promkit_core::crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use promkit_widgets::listbox;
+use promkit_widgets::{
+    listbox,
+    text_editor::{self, TextEditor},
+};
 
 mod archived;
 mod config;
@@ -165,10 +168,11 @@ async fn main() -> anyhow::Result<()> {
     execute!(io::stdout(), EnableMouseCapture, cursor::Hide)?;
 
     while let Ok((signal, queue)) = sig::run(
-        config
-            .streaming
-            .editor
-            .to_state(args.query.clone().unwrap_or_default()),
+        text_editor::State {
+            texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
+            history: Default::default(),
+            config: config.streaming.editor.clone(),
+        },
         config.highlight_style,
         config.streaming.keybinds.clone(),
         Duration::from_millis(args.retrieval_timeout_millis),
@@ -188,11 +192,15 @@ async fn main() -> anyhow::Result<()> {
         match signal {
             Signal::GotoArchived => {
                 archived::run(
-                    config.archived.editor.to_state(String::new()),
-                    config
-                        .archived
-                        .listbox
-                        .to_state(listbox::Listbox::from_displayable(queue)),
+                    text_editor::State {
+                        texteditor: TextEditor::new(String::new()),
+                        history: Default::default(),
+                        config: config.archived.editor.clone(),
+                    },
+                    listbox::State {
+                        listbox: listbox::Listbox::from(queue),
+                        config: config.archived.listbox.clone(),
+                    },
                     config.highlight_style,
                     config.archived.keybinds.clone(),
                     args.case_insensitive,

@@ -98,7 +98,7 @@ fn evaluate_event(
             modifiers: KeyModifiers::SHIFT,
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
-        }) => match state.edit_mode {
+        }) => match state.config.edit_mode {
             text_editor::Mode::Insert => state.texteditor.insert(*ch),
             text_editor::Mode::Overwrite => state.texteditor.overwrite(*ch),
         },
@@ -112,11 +112,14 @@ fn create_panes(text_editor: &text_editor::State, size: (u16, u16), has_cmd: boo
     let retry_hint = if has_cmd { " | Retry" } else { "" };
     let hint = text::State {
         text: text::Text::from(format!("Archived | Pause/Resume{} | Exit", retry_hint)),
-        style: ContentStyle {
-            foreground_color: Some(Color::DarkGrey),
-            ..Default::default()
+        config: text::Config {
+            style: Some(ContentStyle {
+                foreground_color: Some(Color::DarkGrey),
+                ..Default::default()
+            }),
+            lines: Some(1),
         },
-        lines: Some(1),
+        ..Default::default()
     };
 
     vec![

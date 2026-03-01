@@ -110,7 +110,7 @@ impl Archived {
                 modifiers: KeyModifiers::SHIFT,
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
-            }) => match self.readline.edit_mode {
+            }) => match self.readline.config.edit_mode {
                 text_editor::Mode::Insert => self.readline.texteditor.insert(*ch),
                 text_editor::Mode::Overwrite => self.readline.texteditor.overwrite(*ch),
             },
