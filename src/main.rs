@@ -6,7 +6,6 @@ use tokio::time::Duration;
 
 use promkit_core::crossterm::{
     self, cursor,
-    event::DisableMouseCapture,
     execute,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
@@ -120,7 +119,6 @@ impl Drop for Args {
         execute!(
             io::stdout(),
             DisableAlternateScrollCapture,
-            DisableMouseCapture,
             crossterm::terminal::LeaveAlternateScreen,
             cursor::Show
         )
@@ -174,7 +172,12 @@ async fn main() -> anyhow::Result<()> {
         });
 
     enable_raw_mode()?;
-    execute!(io::stdout(), cursor::Hide)?;
+    execute!(
+        io::stdout(),
+        crossterm::terminal::EnterAlternateScreen,
+        EnableAlternateScrollCapture,
+        cursor::Hide
+    )?;
 
     while let Ok((signal, queue)) = sig::run(
         text_editor::State {
@@ -200,12 +203,6 @@ async fn main() -> anyhow::Result<()> {
 
         match signal {
             Signal::GotoArchived => {
-                execute!(
-                    io::stdout(),
-                    crossterm::terminal::EnterAlternateScreen,
-                    EnableAlternateScrollCapture
-                )?;
-
                 archived::run(
                     text_editor::State {
                         texteditor: TextEditor::new(String::new()),
@@ -228,9 +225,8 @@ async fn main() -> anyhow::Result<()> {
                 enable_raw_mode()?;
                 execute!(
                     io::stdout(),
-                    DisableAlternateScrollCapture,
-                    DisableMouseCapture,
-                    crossterm::terminal::LeaveAlternateScreen,
+                    crossterm::terminal::EnterAlternateScreen,
+                    EnableAlternateScrollCapture,
                     cursor::Hide
                 )?;
 
