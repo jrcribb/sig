@@ -17,13 +17,13 @@ use promkit_widgets::{
 
 mod archived;
 mod config;
+use config::{Config, DEFAULT_CONFIG};
 mod highlight;
 mod mouse;
+use mouse::{DisableAlternateScrollCapture, EnableAlternateScrollCapture};
 mod sig;
 mod spawn;
 mod terminal;
-use config::{Config, DEFAULT_CONFIG};
-use mouse::{DisableMouseScrollCapture, EnableMouseScrollCapture};
 
 #[derive(Eq, PartialEq)]
 pub enum Signal {
@@ -119,7 +119,7 @@ impl Drop for Args {
         disable_raw_mode().ok();
         execute!(
             io::stdout(),
-            DisableMouseScrollCapture,
+            DisableAlternateScrollCapture,
             DisableMouseCapture,
             crossterm::terminal::LeaveAlternateScreen,
             cursor::Show
@@ -203,7 +203,7 @@ async fn main() -> anyhow::Result<()> {
                 execute!(
                     io::stdout(),
                     crossterm::terminal::EnterAlternateScreen,
-                    EnableMouseScrollCapture
+                    EnableAlternateScrollCapture
                 )?;
 
                 archived::run(
@@ -228,7 +228,7 @@ async fn main() -> anyhow::Result<()> {
                 enable_raw_mode()?;
                 execute!(
                     io::stdout(),
-                    DisableMouseScrollCapture,
+                    DisableAlternateScrollCapture,
                     DisableMouseCapture,
                     crossterm::terminal::LeaveAlternateScreen,
                     cursor::Hide

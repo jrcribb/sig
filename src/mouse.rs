@@ -6,10 +6,19 @@ use promkit_core::crossterm::Command;
 ///
 /// This avoids capturing click events while allowing wheel input to be
 /// translated into cursor up/down on the alternate screen.
+///
+/// NOTE:
+/// This mode is intended to be used together with
+/// `crossterm::terminal::EnterAlternateScreen` (`CSI ? 1049 h`).
+/// In the normal screen buffer, terminal scrollback usually takes
+/// precedence and wheel input may not be forwarded to the application.
+///
+/// References:
+/// - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EnableMouseScrollCapture;
+pub struct EnableAlternateScrollCapture;
 
-impl Command for EnableMouseScrollCapture {
+impl Command for EnableAlternateScrollCapture {
     fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
         f.write_str(concat!(
             // Reset all related modes first.
@@ -32,9 +41,9 @@ impl Command for EnableMouseScrollCapture {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DisableMouseScrollCapture;
+pub struct DisableAlternateScrollCapture;
 
-impl Command for DisableMouseScrollCapture {
+impl Command for DisableAlternateScrollCapture {
     fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
         f.write_str(concat!(
             "\x1b[?1007l",
