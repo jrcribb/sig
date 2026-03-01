@@ -6,7 +6,7 @@ use tokio::time::Duration;
 
 use promkit_core::crossterm::{
     self, cursor,
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::DisableMouseCapture,
     execute,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
@@ -18,10 +18,12 @@ use promkit_widgets::{
 mod archived;
 mod config;
 mod highlight;
+mod mouse;
 mod sig;
 mod spawn;
 mod terminal;
 use config::{Config, DEFAULT_CONFIG};
+use mouse::{DisableMouseScrollCapture, EnableMouseScrollCapture};
 
 #[derive(Eq, PartialEq)]
 pub enum Signal {
@@ -115,7 +117,14 @@ pub struct Args {
 impl Drop for Args {
     fn drop(&mut self) {
         disable_raw_mode().ok();
-        execute!(io::stdout(), DisableMouseCapture, cursor::Show).ok();
+        execute!(
+            io::stdout(),
+            DisableMouseScrollCapture,
+            DisableMouseCapture,
+            crossterm::terminal::LeaveAlternateScreen,
+            cursor::Show
+        )
+        .ok();
     }
 }
 
@@ -191,7 +200,11 @@ async fn main() -> anyhow::Result<()> {
 
         match signal {
             Signal::GotoArchived => {
-                execute!(io::stdout(), EnableMouseCapture)?;
+                execute!(
+                    io::stdout(),
+                    crossterm::terminal::EnterAlternateScreen,
+                    EnableMouseScrollCapture
+                )?;
 
                 archived::run(
                     text_editor::State {
@@ -213,7 +226,13 @@ async fn main() -> anyhow::Result<()> {
                 // Re-enable raw mode and hide the cursor again here
                 // because they are disabled and shown, respectively, by promkit.
                 enable_raw_mode()?;
-                execute!(io::stdout(), DisableMouseCapture, cursor::Hide)?;
+                execute!(
+                    io::stdout(),
+                    DisableMouseScrollCapture,
+                    DisableMouseCapture,
+                    crossterm::terminal::LeaveAlternateScreen,
+                    cursor::Hide
+                )?;
 
                 crossterm::execute!(
                     io::stdout(),
