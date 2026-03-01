@@ -17,9 +17,9 @@ anyhow = "1.0.102"
 clap = { version = "4.5.60", features = ["derive"] }
 dirs = "6.0.0"
 grep = "0.4.1"
-promkit = "0.10.1"
+promkit = "0.11.0"
 promkit-core = "0.2.0"
-promkit-widgets = { version = "0.2.0", features = ["texteditor", "listbox"] }
+promkit-widgets = { version = "0.3.0", features = ["texteditor", "listbox"] }
 rayon = "1.11.0"
 regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }

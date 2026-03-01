@@ -4,62 +4,11 @@ use promkit_core::crossterm::{
     event::{Event, KeyEvent, MouseEvent},
     style::ContentStyle,
 };
-use promkit_widgets::{
-    listbox,
-    text_editor::{self, TextEditor},
-};
+use promkit_widgets::{listbox, text_editor};
 use serde::{Deserialize, Serialize};
-use termcfg::crossterm_config::{content_style_serde, event_set_serde, option_content_style_serde};
+use termcfg::crossterm_config::{content_style_serde, event_set_serde};
 
 pub static DEFAULT_CONFIG: &str = include_str!("../default.toml");
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct EditorAppearance {
-    pub prefix: String,
-    #[serde(with = "content_style_serde")]
-    pub prefix_style: ContentStyle,
-    #[serde(with = "content_style_serde")]
-    pub active_char_style: ContentStyle,
-    #[serde(with = "content_style_serde")]
-    pub inactive_char_style: ContentStyle,
-    pub lines: Option<usize>,
-}
-
-impl EditorAppearance {
-    pub fn to_state(&self, input: String) -> text_editor::State {
-        text_editor::State {
-            texteditor: TextEditor::new(input),
-            prefix: self.prefix.clone(),
-            prefix_style: self.prefix_style,
-            active_char_style: self.active_char_style,
-            inactive_char_style: self.inactive_char_style,
-            lines: self.lines,
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ListboxAppearance {
-    pub cursor: String,
-    #[serde(default, with = "option_content_style_serde")]
-    pub active_item_style: Option<ContentStyle>,
-    #[serde(default, with = "option_content_style_serde")]
-    pub inactive_item_style: Option<ContentStyle>,
-    pub lines: Option<usize>,
-}
-
-impl ListboxAppearance {
-    pub fn to_state(&self, listbox: listbox::Listbox) -> listbox::State {
-        listbox::State {
-            listbox,
-            cursor: self.cursor.clone(),
-            active_item_style: self.active_item_style,
-            inactive_item_style: self.inactive_item_style,
-            lines: self.lines,
-        }
-    }
-}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EditorKeybinds {
@@ -105,14 +54,14 @@ pub struct ArchivedKeybinds {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StreamingConfig {
-    pub editor: EditorAppearance,
+    pub editor: text_editor::Config,
     pub keybinds: StreamingKeybinds,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArchivedConfig {
-    pub editor: EditorAppearance,
-    pub listbox: ListboxAppearance,
+    pub editor: text_editor::Config,
+    pub listbox: listbox::Config,
     pub keybinds: ArchivedKeybinds,
 }
 
