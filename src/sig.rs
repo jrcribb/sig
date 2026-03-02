@@ -209,47 +209,16 @@ pub async fn run(
         let mut paused = false;
 
         loop {
-            // While paused:
-            // - Keep watching pause state changes so resume is immediate.
-            // - Keep watching the input channel to detect EOF and terminate cleanly.
-            //   Incoming lines are intentionally dropped while paused.
             if paused {
-                tokio::select! {
-                    biased;
-                    changed = pause_rx.changed() => {
-                        if changed.is_err() {
-                            break;
-                        }
-                        paused = *pause_rx.borrow_and_update();
-                    }
-                    maybe_line = rx.recv() => {
-                        // Even while paused, observe EOF so the task can terminate.
-                        if maybe_line.is_none() {
-                            break;
-                        }
-                        // Ignore incoming lines while paused.
-                    }
+                if pause_rx.changed().await.is_err() {
+                    break;
                 }
+                paused = *pause_rx.borrow_and_update();
                 continue;
             }
 
-            // When render throttling is enabled:
-            // - Wait for the next render tick before processing input.
-            // - Allow pause changes to interrupt the wait so Ctrl+S stays responsive.
             if let Some(interval) = &mut maybe_interval {
-                tokio::select! {
-                    biased;
-                    changed = pause_rx.changed() => {
-                        if changed.is_err() {
-                            break;
-                        }
-                        paused = *pause_rx.borrow_and_update();
-                        continue;
-                    }
-                    _ = interval.tick() => {
-                        // Proceed to input handling after the interval tick.
-                    }
-                }
+                interval.tick().await;
             }
 
             tokio::select! {
