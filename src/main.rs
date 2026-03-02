@@ -5,8 +5,7 @@ use clap::Parser;
 use tokio::time::Duration;
 
 use promkit_core::crossterm::{
-    self, cursor,
-    execute,
+    self, cursor, execute,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use promkit_widgets::{
@@ -115,14 +114,7 @@ pub struct Args {
 
 impl Drop for Args {
     fn drop(&mut self) {
-        disable_raw_mode().ok();
-        execute!(
-            io::stdout(),
-            DisableAlternateScrollCapture,
-            crossterm::terminal::LeaveAlternateScreen,
-            cursor::Show
-        )
-        .ok();
+        let _ = leave_terminal();
     }
 }
 
@@ -158,6 +150,30 @@ fn determine_config_file(config_path: Option<PathBuf>) -> anyhow::Result<PathBuf
     Ok(default_path)
 }
 
+/// Enter the alternate screen and enable alternate scroll capture mode.
+fn enter_terminal() -> anyhow::Result<()> {
+    enable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        crossterm::terminal::EnterAlternateScreen,
+        EnableAlternateScrollCapture,
+        cursor::Hide
+    )?;
+    Ok(())
+}
+
+/// Leave the alternate screen and disable alternate scroll capture mode.
+fn leave_terminal() -> anyhow::Result<()> {
+    disable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        DisableAlternateScrollCapture,
+        crossterm::terminal::LeaveAlternateScreen,
+        cursor::Show
+    )?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -171,13 +187,7 @@ async fn main() -> anyhow::Result<()> {
             Config::load_from(DEFAULT_CONFIG).expect("Failed to load default configuration")
         });
 
-    enable_raw_mode()?;
-    execute!(
-        io::stdout(),
-        crossterm::terminal::EnterAlternateScreen,
-        EnableAlternateScrollCapture,
-        cursor::Hide
-    )?;
+    enter_terminal()?;
 
     while let Ok((signal, queue)) = sig::run(
         text_editor::State {
@@ -222,13 +232,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // Re-enable raw mode and hide the cursor again here
                 // because they are disabled and shown, respectively, by promkit.
-                enable_raw_mode()?;
-                execute!(
-                    io::stdout(),
-                    crossterm::terminal::EnterAlternateScreen,
-                    EnableAlternateScrollCapture,
-                    cursor::Hide
-                )?;
+                enter_terminal()?;
 
                 crossterm::execute!(
                     io::stdout(),
