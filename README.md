@@ -4,7 +4,7 @@
 
 Interactive grep
 
-|![sig.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig.gif)|![sig_archived.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig_archived.gif)|
+|![sig.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig.gif)|![sig.static.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig.static.gif)|
 |---|---|
 
 ## Features
@@ -28,8 +28,8 @@ Interactive grep
     and it is possible to switch to a mode
     where you can grep through these N entries
     based on key inputs at any given moment.
-  - Additionally, by starting in this mode,
-    it is also possible to grep through static data such as files.
+  - For static data such as files, *sig* automatically switches
+    to archived mode when the input reaches EOF.
     - like [ugrep](https://github.com/Genivia/ugrep) with `-Q` option.
 
 ## Installation
@@ -76,7 +76,7 @@ nix shell github:ynqa/sig
 
 Or run it directly:
 ```nix
-cat README.md | nix run github:ynqa/sig -- --archived
+cat README.md | nix run github:ynqa/sig
 ```
 
 ### Nix (classic)
@@ -107,14 +107,9 @@ in
 stern --context kind-kind etcd |& sig
 # or
 sig --cmd "stern --context kind-kind etcd" # this is able to retry command by ctrl+r.
-```
 
-### Archived mode
-
-```bash
-cat README.md |& sig -a
-# or
-sig -a --cmd "cat README.md"
+# or static input (switches to archived view after EOF)
+cat README.md |& sig
 ```
 
 ## Keymap
@@ -123,6 +118,7 @@ sig -a --cmd "cat README.md"
 | :-                   | :-
 | <kbd>Ctrl + C</kbd>  | Exit `sig`
 | <kbd>Ctrl + R</kbd>  | Retry command if `--cmd` is specified
+| <kbd>Ctrl + S</kbd>  | Pause/Resume stream ingestion
 | <kbd>Ctrl + F</kbd>  | Enter Archived mode
 | <kbd>←</kbd>         | Move the cursor one character to the left
 | <kbd>→</kbd>         | Move the cursor one character to the right
@@ -156,10 +152,8 @@ $ stern --context kind-kind etcd |& sig
 Or the method to retry command by pressing ctrl+r:
 $ sig --cmd "stern --context kind-kind etcd"
 
-Archived mode:
-$ cat README.md |& sig -a
-Or
-$ sig -a --cmd "cat README.md"
+Static input (switches to archived view after EOF):
+$ cat README.md |& sig
 
 Options:
       --retrieval-timeout <RETRIEVAL_TIMEOUT_MILLIS>
@@ -168,16 +162,78 @@ Options:
           Interval to render a line in milliseconds.
   -q, --queue-capacity <QUEUE_CAPACITY>
           Queue capacity to store lines. [default: 1000]
-  -a, --archived
-          Archived mode to grep through static data.
   -i, --ignore-case
           Case insensitive search.
       --cmd <CMD>
           Command to execute on initial and retries.
   -Q, --query <QUERY>
           Initial query.
+  -c, --config <CONFIG_FILE>
+          Path to the configuration file.
   -h, --help
           Print help (see more with '--help')
   -V, --version
           Print version
 ```
+
+## Configuration
+
+<details>
+<summary>The following settings are available in config.toml</summary>
+
+```toml
+# Style for matched substrings
+highlight_style = "fg=red"
+
+[streaming.editor]
+# Query prompt while streaming
+prefix = "❯❯ "
+prefix_style = "fg=darkgreen"
+active_char_style = "bg=darkcyan"
+inactive_char_style = ""
+# lines =
+
+[streaming.keybinds]
+exit = ["Ctrl+C"]
+goto_archived = ["Ctrl+F"]
+retry = ["Ctrl+R"]
+toggle_pause = ["Ctrl+S"]
+
+[streaming.keybinds.editor]
+backward = ["Left"]
+forward = ["Right"]
+move_to_head = ["Ctrl+A"]
+move_to_tail = ["Ctrl+E"]
+erase = ["Backspace"]
+erase_all = ["Ctrl+U"]
+
+[archived.editor]
+# Query prompt in archived mode
+prefix = "❯❯❯ "
+prefix_style = "fg=darkblue"
+active_char_style = "bg=darkcyan"
+inactive_char_style = ""
+# lines =
+
+[archived.listbox]
+cursor = "❯ "
+# active_item_style =
+# inactive_item_style =
+# lines =
+
+[archived.keybinds]
+exit = ["Ctrl+C"]
+retry = ["Ctrl+R"]
+up = ["Up", "ScrollUp"]
+down = ["Down", "ScrollDown"]
+
+[archived.keybinds.editor]
+backward = ["Left"]
+forward = ["Right"]
+move_to_head = ["Ctrl+A"]
+move_to_tail = ["Ctrl+E"]
+erase = ["Backspace"]
+erase_all = ["Ctrl+U"]
+```
+
+</details>

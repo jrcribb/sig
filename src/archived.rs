@@ -16,7 +16,10 @@ use promkit_widgets::{
     text_editor,
 };
 
-use crate::highlight::highlight;
+use crate::{
+    config::{matches_keybind, ArchivedKeybinds},
+    highlight::highlight,
+};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Index {
@@ -36,94 +39,65 @@ struct Archived {
     highlight_style: ContentStyle,
     case_insensitive: bool,
     cmd: Option<String>,
+    keybinds: ArchivedKeybinds,
 }
 
 impl Archived {
     fn evaluate_internal(&mut self, event: &Event) -> anyhow::Result<promkit::Signal> {
+        if matches_keybind(event, &self.keybinds.retry) {
+            if self.cmd.is_some() {
+                // Exiting archive mode here allows
+                // the caller to re-enter streaming mode,
+                // as it is running in an infinite loop.
+                return Ok(promkit::Signal::Quit);
+            }
+        }
+
+        if matches_keybind(event, &self.keybinds.exit) {
+            return Err(anyhow::anyhow!("exit"));
+        }
+
+        if matches_keybind(event, &self.keybinds.editor.backward) {
+            self.readline.texteditor.backward();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.editor.forward) {
+            self.readline.texteditor.forward();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.editor.move_to_head) {
+            self.readline.texteditor.move_to_head();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.editor.move_to_tail) {
+            self.readline.texteditor.move_to_tail();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.up) {
+            self.text.listbox.backward();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.down) {
+            self.text.listbox.forward();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.editor.erase) {
+            self.readline.texteditor.erase();
+            return Ok(promkit::Signal::Continue);
+        }
+
+        if matches_keybind(event, &self.keybinds.editor.erase_all) {
+            self.readline.texteditor.erase_all();
+            return Ok(promkit::Signal::Continue);
+        }
+
         match event {
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('r'),
-                modifiers: KeyModifiers::CONTROL,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => {
-                if self.cmd.is_some() {
-                    // Exiting archive mode here allows
-                    // the caller to re-enter streaming mode,
-                    // as it is running in an infinite loop.
-                    return Ok(promkit::Signal::Quit);
-                }
-            }
-
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('c'),
-                modifiers: KeyModifiers::CONTROL,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => return Err(anyhow::anyhow!("ctrl+c")),
-
-            // Move cursor (text editor)
-            Event::Key(KeyEvent {
-                code: KeyCode::Left,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => {
-                self.readline.texteditor.backward();
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Right,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => {
-                self.readline.texteditor.forward();
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('a'),
-                modifiers: KeyModifiers::CONTROL,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => self.readline.texteditor.move_to_head(),
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('e'),
-                modifiers: KeyModifiers::CONTROL,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => self.readline.texteditor.move_to_tail(),
-
-            // Move cursor (listbox).
-            Event::Key(KeyEvent {
-                code: KeyCode::Up,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => {
-                self.text.listbox.backward();
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Down,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => {
-                self.text.listbox.forward();
-            }
-
-            // Erase char(s).
-            Event::Key(KeyEvent {
-                code: KeyCode::Backspace,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => self.readline.texteditor.erase(),
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('u'),
-                modifiers: KeyModifiers::CONTROL,
-                kind: KeyEventKind::Press,
-                state: KeyEventState::NONE,
-            }) => self.readline.texteditor.erase_all(),
-
             // Input char.
             Event::Key(KeyEvent {
                 code: KeyCode::Char(ch),
@@ -136,7 +110,7 @@ impl Archived {
                 modifiers: KeyModifiers::SHIFT,
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
-            }) => match self.readline.edit_mode {
+            }) => match self.readline.config.edit_mode {
                 text_editor::Mode::Insert => self.readline.texteditor.insert(*ch),
                 text_editor::Mode::Overwrite => self.readline.texteditor.overwrite(*ch),
             },
@@ -202,6 +176,7 @@ pub async fn run(
     readline: text_editor::State,
     text: listbox::State,
     highlight_style: ContentStyle,
+    keybinds: ArchivedKeybinds,
     case_insensitive: bool,
     cmd: Option<String>,
 ) -> anyhow::Result<()> {
@@ -222,6 +197,7 @@ pub async fn run(
         highlight_style,
         case_insensitive,
         cmd,
+        keybinds,
     }
     .run()
     .await

@@ -1,14 +1,11 @@
-use std::{collections::VecDeque, io};
+use std::{io, io::Write, path::PathBuf};
 
+use anyhow::anyhow;
 use clap::Parser;
-use tokio::{
-    sync::mpsc,
-    time::{timeout, Duration},
-};
+use tokio::time::Duration;
 
 use promkit_core::crossterm::{
     self, cursor, execute,
-    style::{Color, ContentStyle},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use promkit_widgets::{
@@ -17,7 +14,11 @@ use promkit_widgets::{
 };
 
 mod archived;
+mod config;
+use config::{Config, DEFAULT_CONFIG};
 mod highlight;
+mod mouse;
+use mouse::{DisableAlternateScrollCapture, EnableAlternateScrollCapture};
 mod sig;
 mod spawn;
 mod terminal;
@@ -45,10 +46,8 @@ $ stern --context kind-kind etcd |& sig
 Or the method to retry command by pressing ctrl+r:
 $ sig --cmd \"stern --context kind-kind etcd\"
 
-Archived mode:
-$ cat README.md |& sig -a
-Or
-$ sig -a --cmd \"cat README.md\"
+Static input (switches to archived view after EOF):
+$ cat README.md |& sig
 
 Options:
 {options}
@@ -85,14 +84,6 @@ pub struct Args {
     pub queue_capacity: usize,
 
     #[arg(
-        short = 'a',
-        long = "archived",
-        default_value = "false",
-        help = "Archived mode to grep through static data."
-    )]
-    pub archived: bool,
-
-    #[arg(
         short = 'i',
         long = "ignore-case",
         default_value = "false",
@@ -116,170 +107,143 @@ pub struct Args {
         in the text editor when the program starts."
     )]
     pub query: Option<String>,
+
+    #[arg(short = 'c', long = "config", help = "Path to the configuration file.")]
+    pub config_file: Option<PathBuf>,
 }
 
 impl Drop for Args {
     fn drop(&mut self) {
-        disable_raw_mode().ok();
-        execute!(io::stdout(), cursor::Show).ok();
+        let _ = leave_terminal();
     }
+}
+
+/// Ensure that the specified file exists.
+/// If it does not exist, creates the file and its parent directories if necessary,
+/// and writes the default configuration content to it.
+fn ensure_file_exists(path: &PathBuf) -> anyhow::Result<()> {
+    if path.exists() {
+        return Ok(());
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| anyhow!("Failed to create directory: {e}"))?;
+    }
+
+    std::fs::File::create(path)?.write_all(DEFAULT_CONFIG.as_bytes())?;
+    Ok(())
+}
+
+/// Determine the configuration file path.
+fn determine_config_file(config_path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    if let Some(path) = config_path {
+        ensure_file_exists(&path)?;
+        return Ok(path);
+    }
+
+    let default_path = dirs::config_dir()
+        .ok_or_else(|| anyhow!("Failed to determine the configuration directory"))?
+        .join("sig")
+        .join("config.toml");
+
+    ensure_file_exists(&default_path)?;
+    Ok(default_path)
+}
+
+/// Enter the alternate screen and enable alternate scroll capture mode.
+fn enter_terminal() -> anyhow::Result<()> {
+    enable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        crossterm::terminal::EnterAlternateScreen,
+        EnableAlternateScrollCapture,
+        cursor::Hide
+    )?;
+    Ok(())
+}
+
+/// Leave the alternate screen and disable alternate scroll capture mode.
+fn leave_terminal() -> anyhow::Result<()> {
+    disable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        DisableAlternateScrollCapture,
+        crossterm::terminal::LeaveAlternateScreen,
+        cursor::Show
+    )?;
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    let config = determine_config_file(args.config_file.clone())
+        .and_then(|config_file| {
+            std::fs::read_to_string(&config_file)
+                .map_err(|e| anyhow!("Failed to read configuration file: {e}"))
+        })
+        .and_then(|content| Config::load_from(&content))
+        .unwrap_or_else(|_e| {
+            Config::load_from(DEFAULT_CONFIG).expect("Failed to load default configuration")
+        });
 
-    enable_raw_mode()?;
-    execute!(io::stdout(), cursor::Hide)?;
+    enter_terminal()?;
 
-    let highlight_style = ContentStyle {
-        foreground_color: Some(Color::Red),
-        ..Default::default()
-    };
-
-    if args.archived {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        let input_task = match &args.cmd {
-            Some(cmd) => spawn::spawn_cmd_result_sender(
-                cmd,
-                tx,
-                Duration::from_millis(args.retrieval_timeout_millis),
-            ),
-            None => {
-                spawn::spawn_stdin_sender(tx, Duration::from_millis(args.retrieval_timeout_millis))
-            }
-        }?;
-
-        let mut queue = VecDeque::with_capacity(args.queue_capacity);
-        loop {
-            match timeout(
-                Duration::from_millis(args.retrieval_timeout_millis),
-                rx.recv(),
-            )
-            .await
-            {
-                Ok(Some(line)) => {
-                    if queue.len() > args.queue_capacity {
-                        queue.pop_front().unwrap();
-                    }
-                    queue.push_back(line.clone());
-                }
-                Ok(None) => break,
-                Err(_) => break,
-            }
-        }
-
-        // Stop the input task
-        input_task.handle.abort();
-
+    while let Ok((signal, queue)) = sig::run(
+        text_editor::State {
+            texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
+            history: Default::default(),
+            config: config.streaming.editor.clone(),
+        },
+        config.highlight_style,
+        config.streaming.keybinds.clone(),
+        Duration::from_millis(args.retrieval_timeout_millis),
+        args.render_interval_millis.map(Duration::from_millis),
+        args.queue_capacity,
+        args.case_insensitive,
+        args.cmd.clone(),
+    )
+    .await
+    {
         crossterm::execute!(
             io::stdout(),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
             cursor::MoveTo(0, 0),
         )?;
 
-        archived::run(
-            text_editor::State {
-                texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
-                prefix: String::from("❯❯❯ "),
-                prefix_style: ContentStyle {
-                    foreground_color: Some(Color::DarkBlue),
-                    ..Default::default()
-                },
-                active_char_style: ContentStyle {
-                    background_color: Some(Color::DarkCyan),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            listbox::State {
-                listbox: listbox::Listbox::from_displayable(queue),
-                cursor: String::from("❯ "),
-                active_item_style: None,
-                inactive_item_style: None,
-                lines: Default::default(),
-            },
-            highlight_style,
-            args.case_insensitive,
-            // In archived mode, command for retry is meaningless.
-            None,
-        )
-        .await?;
-    } else {
-        while let Ok((signal, queue)) = sig::run(
-            text_editor::State {
-                texteditor: TextEditor::new(args.query.clone().unwrap_or_default()),
-                prefix: String::from("❯❯ "),
-                prefix_style: ContentStyle {
-                    foreground_color: Some(Color::DarkGreen),
-                    ..Default::default()
-                },
-                active_char_style: ContentStyle {
-                    background_color: Some(Color::DarkCyan),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            highlight_style,
-            Duration::from_millis(args.retrieval_timeout_millis),
-            args.render_interval_millis.map(Duration::from_millis),
-            args.queue_capacity,
-            args.case_insensitive,
-            args.cmd.clone(),
-        )
-        .await
-        {
-            crossterm::execute!(
-                io::stdout(),
-                crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                cursor::MoveTo(0, 0),
-            )?;
+        match signal {
+            Signal::GotoArchived => {
+                archived::run(
+                    text_editor::State {
+                        texteditor: TextEditor::new(String::new()),
+                        history: Default::default(),
+                        config: config.archived.editor.clone(),
+                    },
+                    listbox::State {
+                        listbox: listbox::Listbox::from(queue),
+                        config: config.archived.listbox.clone(),
+                    },
+                    config.highlight_style,
+                    config.archived.keybinds.clone(),
+                    args.case_insensitive,
+                    args.cmd.clone(),
+                )
+                .await?;
 
-            match signal {
-                Signal::GotoArchived => {
-                    archived::run(
-                        text_editor::State {
-                            prefix: String::from("❯❯❯ "),
-                            prefix_style: ContentStyle {
-                                foreground_color: Some(Color::DarkBlue),
-                                ..Default::default()
-                            },
-                            active_char_style: ContentStyle {
-                                background_color: Some(Color::DarkCyan),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        },
-                        listbox::State {
-                            listbox: listbox::Listbox::from_displayable(queue),
-                            cursor: String::from("❯ "),
-                            active_item_style: None,
-                            inactive_item_style: None,
-                            lines: Default::default(),
-                        },
-                        highlight_style,
-                        args.case_insensitive,
-                        args.cmd.clone(),
-                    )
-                    .await?;
+                // Re-enable raw mode and hide the cursor again here
+                // because they are disabled and shown, respectively, by promkit.
+                enter_terminal()?;
 
-                    // Re-enable raw mode and hide the cursor again here
-                    // because they are disabled and shown, respectively, by promkit.
-                    enable_raw_mode()?;
-                    execute!(io::stdout(), cursor::Hide)?;
-
-                    crossterm::execute!(
-                        io::stdout(),
-                        crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                        cursor::MoveTo(0, 0),
-                    )?;
-                }
-                Signal::GotoStreaming => {
-                    continue;
-                }
-                _ => {}
+                crossterm::execute!(
+                    io::stdout(),
+                    crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+                    cursor::MoveTo(0, 0),
+                )?;
             }
+            Signal::GotoStreaming => {
+                continue;
+            }
+            _ => {}
         }
     }
 
