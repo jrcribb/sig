@@ -4,7 +4,7 @@
 
 Interactive grep
 
-|![sig.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig.gif)|![sig_archived.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig_archived.gif)|
+|![sig.gif](https://github.com/ynqa/ynqa/blob/master/demo/sig.gif)|![sig.static.gif](assets/sig.static.gif)|
 |---|---|
 
 ## Features
